@@ -1340,77 +1340,44 @@ p {
   overflow: hidden;
   border: 1px solid #e0e6ef;
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
-    linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
-    #f8fafc;
-  background-size: 26px 26px;
+  background: #f8fafc;
 }
 
-.figma-frame,
-.figma-node {
-  position: absolute;
-  border: 1px solid #b9c6d5;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.84);
+.figma-preview iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
-.figma-frame.large {
-  width: 112px;
-  height: 132px;
-  left: 26px;
-  top: 31px;
-}
-
-.figma-frame.medium {
-  width: 105px;
-  height: 126px;
-  left: 157px;
-  top: 24px;
-}
-
-.figma-frame.small {
-  width: 82px;
-  height: 112px;
-  right: 23px;
-  top: 42px;
-}
-
-.figma-node {
-  height: 14px;
-  background: #087995;
-}
-
-.figma-node.a {
-  width: 54px;
-  left: 55px;
-  top: 67px;
-}
-
-.figma-node.b {
-  width: 63px;
-  left: 177px;
-  top: 71px;
-}
-
-.figma-node.c {
-  width: 42px;
-  right: 43px;
-  top: 87px;
-}
-
-.figma-brand {
-  position: absolute;
-  right: 12px;
-  top: 10px;
-  width: 28px;
-  height: 28px;
+.figma-empty-state {
+  min-height: 150px;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 8px;
+  border: 1px dashed #cbd5e1;
   border-radius: 8px;
-  color: #ffffff;
-  font-weight: 900;
-  background: linear-gradient(135deg, #ff7262, #a259ff 52%, #1abcfe);
+  padding: 18px;
+  color: #64748b;
+  text-align: center;
+  background: #f8fafc;
+}
+
+.figma-empty-state strong {
+  color: #1f2937;
+}
+
+.figma-empty-state p {
+  max-width: 280px;
+  margin-bottom: 0;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.figma-empty-state.denied {
+  color: #be123c;
+  border-color: #f3c6cb;
+  background: #fff8f8;
 }
 
 .preview-footer {
@@ -1697,6 +1664,17 @@ p {
   color: #0b64c0;
   text-decoration: none;
   overflow-wrap: anywhere;
+}
+
+.preview-empty-link {
+  display: block;
+  margin-top: 12px;
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f1f5f9;
 }
 
 .preview-note {

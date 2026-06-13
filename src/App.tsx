@@ -150,6 +150,11 @@ const signalOptions: Array<{
   },
 ]
 
+function isValidFigmaFileUrl(url: string) {
+  const normalizedUrl = url.trim().toLowerCase()
+  return normalizedUrl.includes('figma.com/design') || normalizedUrl.includes('figma.com/file')
+}
+
 function App() {
   return (
     <Routes>
@@ -521,8 +526,8 @@ function StudentWorkspace() {
     blocked: '링크 문제와 활동 없음 중 어떤 알림을 먼저 보여줄지 확인이 필요합니다.',
     question: '링크 문제와 활동 없음 중 어떤 상황을 더 높은 우선순위로 봐야 할까요?',
   })
-  const [figmaUrl, setFigmaUrl] = useState('https://www.figma.com/design/abc123/team3')
-  const [linkStatus, setLinkStatus] = useState<LinkStatus>('ok')
+  const [figmaUrl, setFigmaUrl] = useState('')
+  const [linkStatus, setLinkStatus] = useState<LinkStatus>('unchecked')
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [lastSharedAt, setLastSharedAt] = useState('아직 공유 전')
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('none')
@@ -533,7 +538,12 @@ function StudentWorkspace() {
 
   const artifactType: ArtifactType = mode === 'both' ? 'mixed' : mode
   const requiresFigma = mode !== 'table'
-  const canShare = !requiresFigma || linkStatus === 'ok'
+  const hasFigmaUrl = figmaUrl.trim().length > 0
+  const canRenderFigmaEmbed = hasFigmaUrl && isValidFigmaFileUrl(figmaUrl)
+  const figmaEmbedUrl = canRenderFigmaEmbed
+    ? `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(figmaUrl.trim())}`
+    : ''
+  const canShare = !requiresFigma || (hasFigmaUrl && linkStatus === 'ok')
   const snapshotShared = saveState === 'shared'
   const canFinalize = snapshotShared && feedbackState === 'received'
   const selectedSignal = signalOptions.find((option) => option.value === teamSignal) ?? signalOptions[0]
@@ -632,7 +642,14 @@ function StudentWorkspace() {
 
   const checkAccess = () => {
     const normalizedUrl = figmaUrl.trim().toLowerCase()
-    setLinkStatus(normalizedUrl.includes('figma.com/design') || normalizedUrl.includes('figma.com/file') ? 'ok' : 'denied')
+    if (!normalizedUrl) {
+      setLinkStatus('unchecked')
+      setSaveState('idle')
+      setIsFinalized(false)
+      setLastFinalizedAt('링크 입력 후 다시 확인 필요')
+      return
+    }
+    setLinkStatus(isValidFigmaFileUrl(normalizedUrl) ? 'ok' : 'denied')
     setSaveState('idle')
     setIsFinalized(false)
     setLastFinalizedAt('권한 확인 후 다시 공유 필요')
@@ -822,6 +839,7 @@ function StudentWorkspace() {
                   <span>피그마 URL</span>
                   <input
                     value={figmaUrl}
+                    placeholder="https://www.figma.com/design/..."
                     onChange={(event) => {
                       setFigmaUrl(event.target.value)
                       setLinkStatus('unchecked')
@@ -848,23 +866,37 @@ function StudentWorkspace() {
                   {linkStatus === 'unchecked' && <ShieldCheck size={17} />}
                   {linkHelp[linkStatus]}
                 </p>
-                <div className="figma-preview" aria-label="피그마 미리보기">
-                  <div className="figma-frame large" />
-                  <div className="figma-frame medium" />
-                  <div className="figma-frame small" />
-                  <div className="figma-node a" />
-                  <div className="figma-node b" />
-                  <div className="figma-node c" />
-                  <div className="figma-brand">F</div>
-                </div>
-                <div className="preview-footer">
-                  <span>최근 수정</span>
-                  <strong>2분 전</strong>
-                  <button type="button">
-                    <RefreshCw size={16} />
-                    새로고침
-                  </button>
-                </div>
+                {hasFigmaUrl ? (
+                  <>
+                    {canRenderFigmaEmbed ? (
+                      <div className="figma-preview" aria-label="피그마 미리보기">
+                        <iframe title="피그마 작업 미리보기" src={figmaEmbedUrl} allowFullScreen />
+                      </div>
+                    ) : (
+                      <div className="figma-empty-state denied">
+                        <AlertTriangle size={22} />
+                        <strong>피그마 파일 링크를 확인해 주세요.</strong>
+                        <p>design 또는 file 주소를 입력해야 미리보기를 열 수 있습니다.</p>
+                      </div>
+                    )}
+                    {canRenderFigmaEmbed && (
+                      <div className="preview-footer">
+                        <span>최근 수정</span>
+                        <strong>2분 전</strong>
+                        <button type="button" onClick={checkAccess}>
+                          <RefreshCw size={16} />
+                          새로고침
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="figma-empty-state">
+                    <LinkIcon size={22} />
+                    <strong>피그마 링크를 입력해 주세요.</strong>
+                    <p>링크를 입력하고 권한 확인을 누르면 공유 가능 상태로 바뀝니다.</p>
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -972,10 +1004,14 @@ function StudentWorkspace() {
               <span>피그마 링크</span>
               <strong className={`link-badge ${linkStatus}`}>{linkLabels[linkStatus]}</strong>
             </div>
-            <a href={figmaUrl} target="_blank" rel="noreferrer">
-              {figmaUrl.replace('https://www.', '')}
-              <ExternalLink size={16} />
-            </a>
+            {hasFigmaUrl ? (
+              <a href={figmaUrl} target="_blank" rel="noreferrer">
+                {figmaUrl.replace('https://www.', '')}
+                <ExternalLink size={16} />
+              </a>
+            ) : (
+              <span className="preview-empty-link">피그마 링크를 입력하면 여기에 표시됩니다.</span>
+            )}
           </article>
           <div className="preview-note">
             <LinkIcon size={20} />
