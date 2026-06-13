@@ -1,0 +1,130 @@
+import type { Alert, FeedbackSummary, Team, TimelineItem } from '../types'
+
+export const teams: Team[] = [
+  {
+    id: 1,
+    name: 'Team 1',
+    status: 'active',
+    artifactType: 'table',
+    questions: 0,
+    updates: 3,
+    outputLabel: 'In Progress',
+    linkStatus: 'unchecked',
+    lastActivity: 'Updated 2 min ago',
+    summary: '인터뷰 인사이트를 표로 정리하고 핵심 pain point를 묶는 중입니다.',
+  },
+  {
+    id: 2,
+    name: 'Team 2',
+    status: 'question',
+    artifactType: 'mixed',
+    questions: 1,
+    updates: 2,
+    outputLabel: 'In Progress',
+    linkStatus: 'ok',
+    lastActivity: 'Updated 1 min ago',
+    summary: '토론 결과와 Figma 흐름도를 함께 제출했습니다.',
+    question: '평가 기준에서 정량 지표와 정성 인사이트 중 무엇을 우선해야 하나요?',
+    figmaUrl: 'https://www.figma.com/design/demo-team2',
+  },
+  {
+    id: 3,
+    name: 'Team 3',
+    status: 'linkIssue',
+    artifactType: 'figma',
+    questions: 0,
+    updates: 1,
+    outputLabel: 'Access Denied',
+    linkStatus: 'denied',
+    lastActivity: 'Link issue detected',
+    summary: 'Figma 링크가 제출되었지만 교수자 권한으로 접근할 수 없습니다.',
+    figmaUrl: 'https://www.figma.com/design/abc123/team3',
+  },
+  {
+    id: 4,
+    name: 'Team 4',
+    status: 'submitted',
+    artifactType: 'table',
+    questions: 0,
+    updates: 4,
+    outputLabel: 'Final Output',
+    linkStatus: 'ok',
+    lastActivity: 'Submitted 3 min ago',
+    summary: '활동 표와 최종 결론을 제출했습니다. 발표 순서 대기 중입니다.',
+  },
+  {
+    id: 5,
+    name: 'Team 5',
+    status: 'inactive',
+    artifactType: 'mixed',
+    questions: 0,
+    updates: 0,
+    outputLabel: '8 min',
+    linkStatus: 'unchecked',
+    lastActivity: 'Last activity 8 min ago',
+    summary: '최근 활동 업데이트가 없어 교수 확인이 필요합니다.',
+  },
+  {
+    id: 6,
+    name: 'Team 6',
+    status: 'active',
+    artifactType: 'figma',
+    questions: 1,
+    updates: 3,
+    outputLabel: 'In Progress',
+    linkStatus: 'ok',
+    lastActivity: 'Updated 1 min ago',
+    summary: '프로토타입 화면과 사용자 흐름을 Figma로 정리하고 있습니다.',
+    question: '수업 중 실시간 질문을 어디에 배치하는 것이 좋을까요?',
+    figmaUrl: 'https://www.figma.com/design/demo-team6',
+  },
+]
+
+export const alerts: Alert[] = [
+  {
+    id: 1,
+    type: 'linkIssue',
+    title: 'Team 3 link permission issue',
+    description: 'Figma link access denied',
+    time: '2 min ago',
+  },
+  {
+    id: 2,
+    type: 'inactive',
+    title: 'Team 5 inactive for 8 min',
+    description: 'No activity detected',
+    time: '1 min ago',
+  },
+  {
+    id: 3,
+    type: 'question',
+    title: '2 teams asked similar question',
+    description: 'Review & consider class notice',
+    time: '3 min ago',
+  },
+]
+
+export const timeline: TimelineItem[] = [
+  { id: 1, time: '10:22', tone: 'blue', text: 'Team 2 asked a question' },
+  { id: 2, time: '10:21', tone: 'green', text: 'Team 4 submitted final output' },
+  { id: 3, time: '10:18', tone: 'red', text: 'Team 3 link issue detected' },
+  { id: 4, time: '10:15', tone: 'amber', text: 'Team 5 stopped updating' },
+]
+
+export const feedbackSummary: FeedbackSummary[] = [
+  {
+    label: '토론시간 부족',
+    count: 12,
+    note: '다음 수업에서 팀 활동 시간을 5분 늘립니다.',
+  },
+  {
+    label: '발표시간 길음',
+    count: 8,
+    note: '팀별 발표를 3분 pitch로 제한합니다.',
+  },
+  {
+    label: '자료 난이도 높음',
+    count: 6,
+    note: 'Pre-class 영상에 예시 문제를 추가합니다.',
+  },
+]
