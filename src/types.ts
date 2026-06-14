@@ -66,3 +66,38 @@ export type ClassNotice = {
   target: string
   tone: 'link' | 'question' | 'inactive'
 }
+
+export type FormatPhase = 'preClass' | 'inClass'
+
+export type SubmissionType = 'figmaLink' | 'table'
+
+export type TableRowRole = 'prompt' | 'response'
+
+export type TableColumn = {
+  id: string
+  label: string
+  width: number
+}
+
+export type TableRow = {
+  id: string
+  label: string
+  role: TableRowRole
+  cells: Record<string, string>
+}
+
+export type TableTemplate = {
+  columns: TableColumn[]
+  rows: TableRow[]
+}
+
+export type ClassFormat = {
+  phase: FormatPhase
+  submissionType: SubmissionType
+  title: string
+  description: string
+  instructions: string
+  figmaPrompt: string
+  tableTemplate: TableTemplate
+  publishedAt?: string
+}

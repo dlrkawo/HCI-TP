@@ -18,17 +18,32 @@ import {
   MessageCircle,
   Megaphone,
   Monitor,
+  Plus,
   RefreshCw,
   Save,
   Send,
   Settings,
   ShieldCheck,
+  Trash2,
   Users,
 } from 'lucide-react'
-import { ChangeEvent, useMemo, useState } from 'react'
+import { ChangeEvent, MouseEvent as ReactMouseEvent, useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { alerts, classNotices, feedbackSummary, presentationQueue, teams, timeline } from './data/mockClass'
-import type { Alert, ArtifactType, ClassNotice, LinkStatus, Team, TeamReadiness, TeamStatus } from './types'
+import type {
+  Alert,
+  ArtifactType,
+  ClassFormat,
+  ClassNotice,
+  FormatPhase,
+  LinkStatus,
+  SubmissionType,
+  TableRowRole,
+  TableTemplate,
+  Team,
+  TeamReadiness,
+  TeamStatus,
+} from './types'
 
 type TeamFilter = 'all' | TeamStatus
 type SortMode = 'team' | 'status' | 'activity'
@@ -163,23 +178,119 @@ const readinessMeta: Record<TeamReadiness, { label: string; className: string }>
   waiting: { label: '피드백 대기', className: 'waiting' },
 }
 
+const formatPhaseLabels: Record<FormatPhase, string> = {
+  preClass: 'Pre-class',
+  inClass: 'In-class',
+}
+
+const submissionLabels: Record<SubmissionType, string> = {
+  figmaLink: '피그마 링크 제출',
+  table: '표 형식 제출',
+}
+
+const rowRoleLabels: Record<TableRowRole, string> = {
+  prompt: '요구사항',
+  response: '학생 입력',
+}
+
+function createDefaultTableTemplate(): TableTemplate {
+  return {
+    columns: [
+      { id: 'feature', label: '핵심 기능', width: 190 },
+      { id: 'evidence', label: '근거', width: 220 },
+      { id: 'blocker', label: '막힌 점', width: 210 },
+    ],
+    rows: [
+      {
+        id: 'prompt-1',
+        label: '요구사항',
+        role: 'prompt',
+        cells: {
+          feature: '교수자 관제에 꼭 필요한 기능을 적으세요.',
+          evidence: '인터뷰 또는 수업 관찰 근거를 연결하세요.',
+          blocker: '결정이 어려운 지점을 남기세요.',
+        },
+      },
+      {
+        id: 'response-1',
+        label: '학생 입력',
+        role: 'response',
+        cells: {
+          feature: '',
+          evidence: '',
+          blocker: '',
+        },
+      },
+    ],
+  }
+}
+
+function createDefaultClassFormat(): ClassFormat {
+  return {
+    phase: 'inClass',
+    submissionType: 'figmaLink',
+    title: '핵심 기능 우선순위 정하기',
+    description: '팀별 논의 결과를 교수자가 빠르게 확인할 수 있도록 활동 산출물을 공유합니다.',
+    instructions: '수업 중 결정한 내용, 근거, 막힌 지점을 먼저 정리한 뒤 팀 산출물을 제출하세요.',
+    figmaPrompt: '팀이 만든 Figma 화면 흐름 링크를 붙여넣고, 공유 권한을 확인한 뒤 스냅샷을 공유하세요.',
+    tableTemplate: createDefaultTableTemplate(),
+  }
+}
+
+function cloneClassFormat(format: ClassFormat): ClassFormat {
+  return {
+    ...format,
+    tableTemplate: {
+      columns: format.tableTemplate.columns.map((column) => ({ ...column })),
+      rows: format.tableTemplate.rows.map((row) => ({ ...row, cells: { ...row.cells } })),
+    },
+  }
+}
+
+function formatResponseKey(rowId: string, columnId: string) {
+  return `${rowId}:${columnId}`
+}
+
 function isValidFigmaFileUrl(url: string) {
   const normalizedUrl = url.trim().toLowerCase()
   return normalizedUrl.includes('figma.com/design') || normalizedUrl.includes('figma.com/file')
 }
 
 function App() {
+  const [classFormat, setClassFormat] = useState<ClassFormat>(() => createDefaultClassFormat())
+  const [studentTableResponses, setStudentTableResponses] = useState<Record<string, string>>({})
+
+  const publishClassFormat = (nextFormat: ClassFormat) => {
+    setClassFormat(nextFormat)
+    setStudentTableResponses({})
+  }
+
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/professor" replace />} />
-      <Route path="/professor" element={<ProfessorDashboard />} />
-      <Route path="/student" element={<StudentWorkspace />} />
+      <Route path="/professor" element={<ProfessorDashboard classFormat={classFormat} onClassFormatChange={publishClassFormat} />} />
+      <Route
+        path="/student"
+        element={
+          <StudentWorkspace
+            classFormat={classFormat}
+            studentTableResponses={studentTableResponses}
+            onStudentTableResponsesChange={setStudentTableResponses}
+          />
+        }
+      />
       <Route path="*" element={<Navigate to="/professor" replace />} />
     </Routes>
   )
 }
 
-function ProfessorDashboard() {
+function ProfessorDashboard({
+  classFormat,
+  onClassFormatChange,
+}: {
+  classFormat: ClassFormat
+  onClassFormatChange: (format: ClassFormat) => void
+}) {
   const [filter, setFilter] = useState<TeamFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('team')
   const [selectedTeamId, setSelectedTeamId] = useState(3)
@@ -187,6 +298,8 @@ function ProfessorDashboard() {
     3: '발표 전 링크 권한을 먼저 확인시키기',
   })
   const [isNoticeOpen, setIsNoticeOpen] = useState(false)
+  const [isFormatBuilderOpen, setIsFormatBuilderOpen] = useState(false)
+  const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(classFormat))
   const [selectedNoticeId, setSelectedNoticeId] = useState(classNotices[0].id)
 
   const visibleTeams = useMemo(() => {
@@ -292,7 +405,27 @@ function ProfessorDashboard() {
               onNoteChange={(value) => setPrivateNotes((current) => ({ ...current, [selectedTeam.id]: value }))}
             />
 
-            <QuickClassActions onNoticeOpen={() => setIsNoticeOpen((current) => !current)} />
+            <QuickClassActions
+              onNoticeOpen={() => setIsNoticeOpen((current) => !current)}
+              onFormatOpen={() => {
+                setDraftFormat(cloneClassFormat(classFormat))
+                setIsFormatBuilderOpen((current) => !current)
+              }}
+            />
+            {isFormatBuilderOpen && (
+              <FormatBuilderPanel
+                draftFormat={draftFormat}
+                onDraftFormatChange={setDraftFormat}
+                onPublish={(format) => {
+                  const publishedFormat = {
+                    ...cloneClassFormat(format),
+                    publishedAt: '방금 학생 화면에 전달됨',
+                  }
+                  onClassFormatChange(publishedFormat)
+                  setDraftFormat(cloneClassFormat(publishedFormat))
+                }}
+              />
+            )}
             {isNoticeOpen && (
               <NoticeRecommendationPanel
                 notices={classNotices}
@@ -549,9 +682,10 @@ function Metric({
   )
 }
 
-function QuickClassActions({ onNoticeOpen }: { onNoticeOpen: () => void }) {
+function QuickClassActions({ onNoticeOpen, onFormatOpen }: { onNoticeOpen: () => void; onFormatOpen: () => void }) {
   const actions = [
     { label: '전체 공지', detail: '팀 전체에 안내 보내기', icon: Megaphone, tone: 'teal', onClick: onNoticeOpen },
+    { label: '포맷 만들기', detail: '활동 제출 형식 전달', icon: ClipboardList, tone: 'green', onClick: onFormatOpen },
     { label: '질문 던지기', detail: '모든 팀에 질문하기', icon: MessageCircle, tone: 'amber' },
     { label: '시간 연장', detail: '활동 시간 추가하기', icon: Clock3, tone: 'blue' },
     { label: '자료 공유', detail: '수업 자료 제공하기', icon: Monitor, tone: 'purple' },
@@ -573,6 +707,274 @@ function QuickClassActions({ onNoticeOpen }: { onNoticeOpen: () => void }) {
             </button>
           )
         })}
+      </div>
+    </section>
+  )
+}
+
+function FormatBuilderPanel({
+  draftFormat,
+  onDraftFormatChange,
+  onPublish,
+}: {
+  draftFormat: ClassFormat
+  onDraftFormatChange: (format: ClassFormat) => void
+  onPublish: (format: ClassFormat) => void
+}) {
+  const tableWidth = draftFormat.tableTemplate.columns.reduce((sum, column) => sum + column.width, 160)
+
+  const updateFormat = (updates: Partial<ClassFormat>) => {
+    onDraftFormatChange({ ...draftFormat, ...updates })
+  }
+
+  const updateTableTemplate = (tableTemplate: TableTemplate) => {
+    onDraftFormatChange({ ...draftFormat, tableTemplate })
+  }
+
+  const updateColumn = (columnId: string, updates: Partial<TableTemplate['columns'][number]>) => {
+    updateTableTemplate({
+      ...draftFormat.tableTemplate,
+      columns: draftFormat.tableTemplate.columns.map((column) => (column.id === columnId ? { ...column, ...updates } : column)),
+    })
+  }
+
+  const updateRow = (rowId: string, updates: Partial<TableTemplate['rows'][number]>) => {
+    updateTableTemplate({
+      ...draftFormat.tableTemplate,
+      rows: draftFormat.tableTemplate.rows.map((row) => (row.id === rowId ? { ...row, ...updates } : row)),
+    })
+  }
+
+  const updateTemplateCell = (rowId: string, columnId: string, value: string) => {
+    updateTableTemplate({
+      ...draftFormat.tableTemplate,
+      rows: draftFormat.tableTemplate.rows.map((row) =>
+        row.id === rowId ? { ...row, cells: { ...row.cells, [columnId]: value } } : row,
+      ),
+    })
+  }
+
+  const addColumn = () => {
+    const id = `col-${Date.now()}`
+    updateTableTemplate({
+      columns: [...draftFormat.tableTemplate.columns, { id, label: '새 항목', width: 180 }],
+      rows: draftFormat.tableTemplate.rows.map((row) => ({ ...row, cells: { ...row.cells, [id]: '' } })),
+    })
+  }
+
+  const deleteColumn = (columnId: string) => {
+    if (draftFormat.tableTemplate.columns.length <= 1) return
+    updateTableTemplate({
+      columns: draftFormat.tableTemplate.columns.filter((column) => column.id !== columnId),
+      rows: draftFormat.tableTemplate.rows.map((row) => {
+        const { [columnId]: _removed, ...nextCells } = row.cells
+        return { ...row, cells: nextCells }
+      }),
+    })
+  }
+
+  const addRow = (role: TableRowRole) => {
+    const id = `${role}-${Date.now()}`
+    const cells = draftFormat.tableTemplate.columns.reduce<Record<string, string>>((nextCells, column) => {
+      nextCells[column.id] = role === 'prompt' ? '요구사항을 입력하세요.' : ''
+      return nextCells
+    }, {})
+    updateTableTemplate({
+      ...draftFormat.tableTemplate,
+      rows: [
+        ...draftFormat.tableTemplate.rows,
+        {
+          id,
+          label: role === 'prompt' ? '요구사항' : '학생 입력',
+          role,
+          cells,
+        },
+      ],
+    })
+  }
+
+  const deleteRow = (rowId: string) => {
+    if (draftFormat.tableTemplate.rows.length <= 1) return
+    updateTableTemplate({
+      ...draftFormat.tableTemplate,
+      rows: draftFormat.tableTemplate.rows.filter((row) => row.id !== rowId),
+    })
+  }
+
+  const startColumnResize = (columnId: string, event: ReactMouseEvent<HTMLSpanElement>) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = draftFormat.tableTemplate.columns.find((column) => column.id === columnId)?.width ?? 180
+
+    const handleMove = (moveEvent: MouseEvent) => {
+      updateColumn(columnId, { width: Math.max(130, startWidth + moveEvent.clientX - startX) })
+    }
+
+    const handleUp = () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+  }
+
+  return (
+    <section className="panel format-builder-panel" aria-label="포맷 만들기">
+      <div className="format-builder-head">
+        <div>
+          <span className="panel-kicker">Format Builder</span>
+          <h3>학생 활동 포맷 만들기</h3>
+          <p>수업 단계와 제출 방식을 정하면 학생 화면에 바로 전달됩니다.</p>
+        </div>
+        <span className={draftFormat.publishedAt ? 'published-badge active' : 'published-badge'}>
+          {draftFormat.publishedAt ?? '전달 전'}
+        </span>
+      </div>
+
+      <div className="builder-form-grid">
+        <label>
+          <span>포맷 제목</span>
+          <input value={draftFormat.title} onChange={(event) => updateFormat({ title: event.target.value })} />
+        </label>
+        <label>
+          <span>활동 설명</span>
+          <input value={draftFormat.description} onChange={(event) => updateFormat({ description: event.target.value })} />
+        </label>
+      </div>
+
+      <div className="format-builder-section">
+        <span className="builder-step">1. 수업 단계</span>
+        <div className="segmented-control">
+          {(['preClass', 'inClass'] as FormatPhase[]).map((phase) => (
+            <button
+              className={draftFormat.phase === phase ? 'active' : ''}
+              type="button"
+              key={phase}
+              onClick={() => updateFormat({ phase })}
+            >
+              {formatPhaseLabels[phase]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="format-builder-section">
+        <span className="builder-step">2. 제출 방식</span>
+        <div className="format-choice-grid">
+          {(['figmaLink', 'table'] as SubmissionType[]).map((submissionType) => (
+            <button
+              className={draftFormat.submissionType === submissionType ? 'format-choice-card active' : 'format-choice-card'}
+              type="button"
+              key={submissionType}
+              onClick={() => updateFormat({ submissionType })}
+            >
+              {submissionType === 'figmaLink' ? <LinkIcon size={25} /> : <ClipboardList size={25} />}
+              <strong>{submissionLabels[submissionType]}</strong>
+              <span>
+                {submissionType === 'figmaLink'
+                  ? '학생은 자신이 만든 Figma 링크만 제출합니다.'
+                  : '교수가 만든 표 안에 학생이 직접 응답합니다.'}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label className="builder-wide-field">
+        <span>학생 안내 문구</span>
+        <textarea value={draftFormat.instructions} onChange={(event) => updateFormat({ instructions: event.target.value })} rows={3} />
+      </label>
+
+      {draftFormat.submissionType === 'figmaLink' ? (
+        <label className="builder-wide-field">
+          <span>피그마 제출 안내</span>
+          <textarea value={draftFormat.figmaPrompt} onChange={(event) => updateFormat({ figmaPrompt: event.target.value })} rows={3} />
+        </label>
+      ) : (
+        <div className="format-table-editor">
+          <div className="format-table-toolbar">
+            <span>표 편집</span>
+            <div>
+              <button className="outline-button" type="button" onClick={addColumn}>
+                <Plus size={16} />
+                열 추가
+              </button>
+              <button className="outline-button" type="button" onClick={() => addRow('prompt')}>
+                <Plus size={16} />
+                요구 행 추가
+              </button>
+              <button className="outline-button" type="button" onClick={() => addRow('response')}>
+                <Plus size={16} />
+                입력 행 추가
+              </button>
+            </div>
+          </div>
+          <div className="format-table-scroll">
+            <table className="editable-format-table" style={{ minWidth: tableWidth }}>
+              <colgroup>
+                <col style={{ width: 156 }} />
+                {draftFormat.tableTemplate.columns.map((column) => (
+                  <col style={{ width: column.width }} key={column.id} />
+                ))}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>행 구분</th>
+                  {draftFormat.tableTemplate.columns.map((column) => (
+                    <th key={column.id}>
+                      <div className="column-head-cell">
+                        <input value={column.label} onChange={(event) => updateColumn(column.id, { label: event.target.value })} />
+                        <button type="button" onClick={() => deleteColumn(column.id)} disabled={draftFormat.tableTemplate.columns.length <= 1}>
+                          <Trash2 size={15} />
+                        </button>
+                        <span className="resize-handle" onMouseDown={(event) => startColumnResize(column.id, event)} />
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {draftFormat.tableTemplate.rows.map((row) => (
+                  <tr className={row.role} key={row.id}>
+                    <th>
+                      <div className="row-head-cell">
+                        <span className={`row-role ${row.role}`}>{rowRoleLabels[row.role]}</span>
+                        <input value={row.label} onChange={(event) => updateRow(row.id, { label: event.target.value })} />
+                        <button type="button" onClick={() => deleteRow(row.id)} disabled={draftFormat.tableTemplate.rows.length <= 1}>
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </th>
+                    {draftFormat.tableTemplate.columns.map((column) => (
+                      <td key={column.id}>
+                        <textarea
+                          value={row.cells[column.id] ?? ''}
+                          onChange={(event) => updateTemplateCell(row.id, column.id, event.target.value)}
+                          rows={3}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="format-builder-footer">
+        <div className="format-preview-note">
+          <strong>미리보기</strong>
+          <span>
+            {formatPhaseLabels[draftFormat.phase]} · {submissionLabels[draftFormat.submissionType]} · 학생 화면에
+            {draftFormat.submissionType === 'figmaLink' ? ' 링크 제출 카드가 표시됩니다.' : ' 교수 제공 표가 표시됩니다.'}
+          </span>
+        </div>
+        <button className="share-button" type="button" onClick={() => onPublish(draftFormat)}>
+          <Send size={18} />
+          학생에게 전달
+        </button>
       </div>
     </section>
   )
@@ -726,7 +1128,15 @@ function FeedbackPanel() {
   )
 }
 
-function StudentWorkspace() {
+function StudentWorkspace({
+  classFormat,
+  studentTableResponses,
+  onStudentTableResponsesChange,
+}: {
+  classFormat: ClassFormat
+  studentTableResponses: Record<string, string>
+  onStudentTableResponsesChange: (responses: Record<string, string>) => void
+}) {
   const [mode, setMode] = useState<WorkspaceMode>('both')
   const [fields, setFields] = useState({
     did: '인터뷰 내용을 세 가지 핵심 불편함으로 묶었습니다.',
@@ -745,21 +1155,54 @@ function StudentWorkspace() {
   const [isFinalized, setIsFinalized] = useState(false)
   const [lastFinalizedAt, setLastFinalizedAt] = useState('마무리 전')
 
-  const artifactType: ArtifactType = mode === 'both' ? 'mixed' : mode
-  const requiresFigma = mode !== 'table'
+  const activeFormat = classFormat.publishedAt ? classFormat : undefined
+  const artifactType: ArtifactType = activeFormat ? (activeFormat.submissionType === 'figmaLink' ? 'figma' : 'table') : mode === 'both' ? 'mixed' : mode
+  const requiresFigma = activeFormat ? activeFormat.submissionType === 'figmaLink' : mode !== 'table'
+  const responseRows = activeFormat?.submissionType === 'table' ? activeFormat.tableTemplate.rows.filter((row) => row.role === 'response') : []
+  const hasAssignedTableResponses =
+    activeFormat?.submissionType === 'table'
+      ? responseRows.some((row) =>
+          activeFormat.tableTemplate.columns.some((column) => (studentTableResponses[formatResponseKey(row.id, column.id)] ?? '').trim().length > 0),
+        )
+      : false
   const hasFigmaUrl = figmaUrl.trim().length > 0
   const canRenderFigmaEmbed = hasFigmaUrl && isValidFigmaFileUrl(figmaUrl)
   const figmaEmbedUrl = canRenderFigmaEmbed
     ? `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(figmaUrl.trim())}`
     : ''
-  const canShare = !requiresFigma || (hasFigmaUrl && linkStatus === 'ok')
+  const canShare = activeFormat?.submissionType === 'table' ? hasAssignedTableResponses : !requiresFigma || (hasFigmaUrl && linkStatus === 'ok')
   const snapshotShared = saveState === 'shared'
   const canFinalize = snapshotShared && feedbackState === 'received'
   const selectedSignal = signalOptions.find((option) => option.value === teamSignal) ?? signalOptions[0]
   const professorSummary = useMemo(
-    () => [fields.did, fields.decision, fields.blocked].filter(Boolean).join(' '),
-    [fields.blocked, fields.decision, fields.did],
+    () => {
+      if (activeFormat?.submissionType === 'table') {
+        return responseRows
+          .map((row) => {
+            const values = activeFormat.tableTemplate.columns
+              .map((column) => studentTableResponses[formatResponseKey(row.id, column.id)]?.trim())
+              .filter(Boolean)
+            return values.length > 0 ? `${row.label}: ${values.join(' / ')}` : ''
+          })
+          .filter(Boolean)
+          .join(' ')
+      }
+      return [fields.did, fields.decision, fields.blocked].filter(Boolean).join(' ')
+    },
+    [activeFormat, fields.blocked, fields.decision, fields.did, responseRows, studentTableResponses],
   )
+  const currentClassBrief = activeFormat
+    ? {
+        title: activeFormat.title,
+        description: activeFormat.description,
+        prompt: activeFormat.instructions,
+        meta: [
+          { label: '현재 단계', value: formatPhaseLabels[activeFormat.phase] },
+          { label: '제출 방식', value: submissionLabels[activeFormat.submissionType] },
+          { label: '공유 상태', value: activeFormat.publishedAt ?? '전달 전' },
+        ],
+      }
+    : studentClassBrief
   const currentStages = [
     { label: '사전학습 확인', status: '완료', done: true },
     { label: '팀별 논의', status: snapshotShared ? '정리 완료' : '진행 중', done: snapshotShared, active: !snapshotShared },
@@ -773,10 +1216,18 @@ function StudentWorkspace() {
   ]
   const checkpointItems = [
     {
-      label: mode === 'figma' ? '피그마 링크 입력됨' : '활동 표 작성됨',
-      done: mode === 'figma' ? figmaUrl.trim().length > 0 : fields.did.trim().length > 0,
+      label: activeFormat?.submissionType === 'table' ? '교수 제공 표 입력됨' : mode === 'figma' ? '피그마 링크 입력됨' : '활동 표 작성됨',
+      done:
+        activeFormat?.submissionType === 'table'
+          ? hasAssignedTableResponses
+          : mode === 'figma'
+            ? figmaUrl.trim().length > 0
+            : fields.did.trim().length > 0,
     },
-    { label: '피그마 접근 권한 확인됨', done: !requiresFigma || linkStatus === 'ok' },
+    {
+      label: activeFormat?.submissionType === 'table' ? '학생 입력 셀 작성됨' : '피그마 접근 권한 확인됨',
+      done: activeFormat?.submissionType === 'table' ? hasAssignedTableResponses : !requiresFigma || linkStatus === 'ok',
+    },
     { label: '교수님께 질문 준비됨', done: fields.question.trim().length > 0 },
     { label: '발표 준비 완료', done: isFinalized },
   ]
@@ -787,8 +1238,8 @@ function StudentWorkspace() {
       done: saveState !== 'idle',
     },
     {
-      label: '링크 권한 확인',
-      detail: requiresFigma ? linkLabels[linkStatus] : '활동 표만 공유합니다.',
+      label: activeFormat?.submissionType === 'table' ? '표 입력 확인' : '링크 권한 확인',
+      detail: activeFormat?.submissionType === 'table' ? (hasAssignedTableResponses ? '학생 입력 완료' : '입력 전') : requiresFigma ? linkLabels[linkStatus] : '활동 표만 공유합니다.',
       done: canShare,
     },
     {
@@ -820,16 +1271,16 @@ function StudentWorkspace() {
       active: teamSignal === 'normal',
     },
     {
-      label: '함께 제출',
-      detail: '활동 표와 피그마 링크',
-      done: mode === 'both',
-      active: mode !== 'both',
+      label: activeFormat ? '포맷 확인' : '함께 제출',
+      detail: activeFormat ? submissionLabels[activeFormat.submissionType] : '활동 표와 피그마 링크',
+      done: activeFormat ? true : mode === 'both',
+      active: !activeFormat && mode !== 'both',
     },
     {
-      label: '권한 확인',
-      detail: linkLabels[linkStatus],
-      done: !requiresFigma || linkStatus === 'ok',
-      active: requiresFigma && linkStatus === 'unchecked',
+      label: activeFormat?.submissionType === 'table' ? '표 입력' : '권한 확인',
+      detail: activeFormat?.submissionType === 'table' ? (hasAssignedTableResponses ? '입력 완료' : '학생 입력 필요') : linkLabels[linkStatus],
+      done: activeFormat?.submissionType === 'table' ? hasAssignedTableResponses : !requiresFigma || linkStatus === 'ok',
+      active: activeFormat?.submissionType === 'table' ? !hasAssignedTableResponses : requiresFigma && linkStatus === 'unchecked',
     },
     {
       label: '저장',
@@ -880,6 +1331,20 @@ function StudentWorkspace() {
     setFeedbackState('none')
     setIsFinalized(false)
     setLastFinalizedAt('수정 후 다시 완료 필요')
+  }
+
+  const handleStudentTableCellChange = (rowId: string, columnId: string, value: string) => {
+    onStudentTableResponsesChange({
+      ...studentTableResponses,
+      [formatResponseKey(rowId, columnId)]: value,
+    })
+    if (snapshotShared) {
+      setLastSharedAt('표 수정 후 다시 공유 필요')
+    }
+    setSaveState('idle')
+    setFeedbackState('none')
+    setIsFinalized(false)
+    setLastFinalizedAt('표 수정 후 다시 완료 필요')
   }
 
   const changeMode = (nextMode: WorkspaceMode) => {
@@ -979,37 +1444,49 @@ function StudentWorkspace() {
           <section className="workspace-head">
             <h1>팀 활동 공간</h1>
             <p>교수자가 팀 상태를 먼저 파악할 수 있도록 10-20초 안에 읽히는 체크포인트를 공유합니다.</p>
-            <div className="mode-tabs" role="tablist" aria-label="활동 입력 방식">
-              {[
-                { value: 'table', label: '활동 표' },
-                { value: 'figma', label: '피그마 링크' },
-                { value: 'both', label: '함께 제출' },
-              ].map((item) => (
-                <button
-                  className={mode === item.value ? 'active' : ''}
-                  type="button"
-                  key={item.value}
-                  onClick={() => changeMode(item.value as WorkspaceMode)}
-                >
-                  {item.label}
-                  {mode === item.value && <Check size={18} />}
-                </button>
-              ))}
-            </div>
+            {activeFormat ? (
+              <div className="assigned-format-banner">
+                <span>
+                  <ClipboardList size={18} />
+                  교수 제공 포맷
+                </span>
+                <strong>
+                  {formatPhaseLabels[activeFormat.phase]} · {submissionLabels[activeFormat.submissionType]}
+                </strong>
+              </div>
+            ) : (
+              <div className="mode-tabs" role="tablist" aria-label="활동 입력 방식">
+                {[
+                  { value: 'table', label: '활동 표' },
+                  { value: 'figma', label: '피그마 링크' },
+                  { value: 'both', label: '함께 제출' },
+                ].map((item) => (
+                  <button
+                    className={mode === item.value ? 'active' : ''}
+                    type="button"
+                    key={item.value}
+                    onClick={() => changeMode(item.value as WorkspaceMode)}
+                  >
+                    {item.label}
+                    {mode === item.value && <Check size={18} />}
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="class-brief" aria-label="오늘 수업 안내">
             <div>
               <span className="brief-kicker">오늘 수업</span>
-              <h2>{studentClassBrief.title}</h2>
-              <p>{studentClassBrief.description}</p>
+              <h2>{currentClassBrief.title}</h2>
+              <p>{currentClassBrief.description}</p>
             </div>
             <div className="teacher-prompt">
               <span>교수자 요청</span>
-              <p>{studentClassBrief.prompt}</p>
+              <p>{currentClassBrief.prompt}</p>
             </div>
             <div className="brief-meta">
-              {studentClassBrief.meta.map((item) => (
+              {currentClassBrief.meta.map((item) => (
                 <span key={item.label}>
                   <small>{item.label}</small>
                   <strong>{item.value}</strong>
@@ -1050,8 +1527,8 @@ function StudentWorkspace() {
             </div>
           </section>
 
-          <div className={`workspace-grid ${mode === 'both' ? 'two-column' : 'single-column'}`}>
-            {(mode === 'table' || mode === 'both') && (
+          <div className={`workspace-grid ${activeFormat ? 'single-column' : mode === 'both' ? 'two-column' : 'single-column'}`}>
+            {!activeFormat && (mode === 'table' || mode === 'both') && (
               <section className="workspace-card">
                 <div className="card-title">
                   <span>1</span>
@@ -1079,13 +1556,21 @@ function StudentWorkspace() {
               </section>
             )}
 
-            {(mode === 'figma' || mode === 'both') && (
+            {activeFormat?.submissionType === 'table' && (
+              <AssignedFormatTable
+                format={activeFormat}
+                responses={studentTableResponses}
+                onResponseChange={handleStudentTableCellChange}
+              />
+            )}
+
+            {(activeFormat?.submissionType === 'figmaLink' || (!activeFormat && (mode === 'figma' || mode === 'both'))) && (
               <section className="workspace-card figma-card">
                 <div className="card-title">
                   <span>2</span>
                   <div>
-                    <h2>피그마 작업 링크</h2>
-                    <p>공유 전에 교수자가 열 수 있는 링크인지 확인합니다.</p>
+                    <h2>{activeFormat ? '피그마 링크 제출' : '피그마 작업 링크'}</h2>
+                    <p>{activeFormat ? activeFormat.figmaPrompt : '공유 전에 교수자가 열 수 있는 링크인지 확인합니다.'}</p>
                   </div>
                 </div>
                 <label className="url-field">
@@ -1157,7 +1642,11 @@ function StudentWorkspace() {
           <section className="submit-strip">
             <span>
               <ShieldCheck size={22} />
-              {canShare ? '교수자에게 공유할 준비가 되었습니다.' : '공유하기 전에 링크 접근 권한을 확인하세요.'}
+              {canShare
+                ? '교수자에게 공유할 준비가 되었습니다.'
+                : activeFormat?.submissionType === 'table'
+                  ? '교수 제공 표의 학생 입력 셀을 작성하세요.'
+                  : '공유하기 전에 링크 접근 권한을 확인하세요.'}
             </span>
             <div>
               <button className="outline-button" type="button" onClick={saveDraft}>
@@ -1229,7 +1718,7 @@ function StudentWorkspace() {
           </p>
           <div className="snapshot-state-row">
             <span className={`snapshot-state ${saveState}`}>{saveLabels[saveState]}</span>
-            <span>{requiresFigma ? linkLabels[linkStatus] : '링크 없음'}</span>
+            <span>{requiresFigma ? linkLabels[linkStatus] : activeFormat?.submissionType === 'table' ? '표 제출' : '링크 없음'}</span>
             <span>{lastSharedAt}</span>
             <span>{isFinalized ? '발표 준비 완료' : '마무리 전'}</span>
           </div>
@@ -1267,16 +1756,20 @@ function StudentWorkspace() {
             </div>
             <hr />
             <div className="preview-row">
-              <span>피그마 링크</span>
-              <strong className={`link-badge ${linkStatus}`}>{linkLabels[linkStatus]}</strong>
+              <span>{requiresFigma ? '피그마 링크' : '표 제출'}</span>
+              <strong className={requiresFigma ? `link-badge ${linkStatus}` : 'link-badge ok'}>
+                {requiresFigma ? linkLabels[linkStatus] : hasAssignedTableResponses ? '입력됨' : '입력 전'}
+              </strong>
             </div>
-            {hasFigmaUrl ? (
+            {requiresFigma && hasFigmaUrl ? (
               <a href={figmaUrl} target="_blank" rel="noreferrer">
                 {figmaUrl.replace('https://www.', '')}
                 <ExternalLink size={16} />
               </a>
-            ) : (
+            ) : requiresFigma ? (
               <span className="preview-empty-link">피그마 링크를 입력하면 여기에 표시됩니다.</span>
+            ) : (
+              <span className="preview-empty-link">교수 제공 표의 학생 입력 내용이 요약에 반영됩니다.</span>
             )}
           </article>
           <div className="preview-note">
@@ -1400,6 +1893,76 @@ function DemoFlowPanel({ steps }: { steps: DemoFlowStep[] }) {
             </span>
           </span>
         ))}
+      </div>
+    </section>
+  )
+}
+
+function AssignedFormatTable({
+  format,
+  responses,
+  onResponseChange,
+}: {
+  format: ClassFormat
+  responses: Record<string, string>
+  onResponseChange: (rowId: string, columnId: string, value: string) => void
+}) {
+  const tableWidth = format.tableTemplate.columns.reduce((sum, column) => sum + column.width, 160)
+
+  return (
+    <section className="workspace-card assigned-table-card">
+      <div className="card-title">
+        <span>1</span>
+        <div>
+          <h2>교수 제공 표</h2>
+          <p>요구사항 행을 읽고 학생 입력 행에 팀의 답변을 작성합니다.</p>
+        </div>
+        <strong className="assigned-format-chip">{formatPhaseLabels[format.phase]}</strong>
+      </div>
+      <div className="student-table-scroll">
+        <table className="student-format-table" style={{ minWidth: tableWidth }}>
+          <colgroup>
+            <col style={{ width: 150 }} />
+            {format.tableTemplate.columns.map((column) => (
+              <col style={{ width: column.width }} key={column.id} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr>
+              <th>구분</th>
+              {format.tableTemplate.columns.map((column) => (
+                <th key={column.id}>{column.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {format.tableTemplate.rows.map((row) => (
+              <tr className={row.role} key={row.id}>
+                <th>
+                  <span className={`row-role ${row.role}`}>{rowRoleLabels[row.role]}</span>
+                  <strong>{row.label}</strong>
+                </th>
+                {format.tableTemplate.columns.map((column) => {
+                  const responseKey = formatResponseKey(row.id, column.id)
+                  return (
+                    <td key={column.id}>
+                      {row.role === 'prompt' ? (
+                        <p>{row.cells[column.id]}</p>
+                      ) : (
+                        <textarea
+                          value={responses[responseKey] ?? row.cells[column.id] ?? ''}
+                          onChange={(event) => onResponseChange(row.id, column.id, event.target.value)}
+                          placeholder={`${column.label}에 대한 팀 답변`}
+                          rows={4}
+                        />
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   )
