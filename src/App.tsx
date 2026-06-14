@@ -27,7 +27,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react'
-import { ChangeEvent, MouseEvent as ReactMouseEvent, useMemo, useState } from 'react'
+import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { alerts, classNotices, feedbackSummary, presentationQueue, teams, timeline } from './data/mockClass'
 import type {
@@ -813,7 +813,6 @@ function ProfessorDashboard({
 
         {isClassCreation ? (
           <ClassCreationView
-            key={selectedWeek.id}
             weeks={classWeeks}
             selectedWeek={selectedWeek}
             selectedWeekId={selectedWeekId}
@@ -1190,36 +1189,68 @@ function ClassCreationView({
   onSaveClassFormat: (weekId: string, format: ClassFormat) => void
 }) {
   const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(selectedWeek.formats.inClass))
-  const [isWeekInputOpen, setIsWeekInputOpen] = useState(false)
+  const [isBuilderOpen, setIsBuilderOpen] = useState(true)
+  const [isCreatingWeek, setIsCreatingWeek] = useState(false)
   const [newWeekNumber, setNewWeekNumber] = useState('')
   const [weekInputError, setWeekInputError] = useState('')
   const [saveNotice, setSaveNotice] = useState('')
+  const selectedSummaryFormat = isCreatingWeek ? draftFormat : selectedWeek.format
+
+  useEffect(() => {
+    if (!isCreatingWeek) {
+      setDraftFormat(cloneClassFormat(selectedWeek.format))
+    }
+  }, [selectedWeek.id])
 
   const saveFormat = (format: ClassFormat) => {
     const publishedFormat = {
       ...cloneClassFormat(format),
       publishedAt: '방금 저장되어 학생 화면에 반영됨',
     }
-    onSaveClassFormat(selectedWeek.id, publishedFormat)
+    let targetWeekId = selectedWeek.id
+
+    if (isCreatingWeek) {
+      const parsedWeekNumber = Number.parseInt(newWeekNumber, 10)
+      if (!Number.isInteger(parsedWeekNumber) || parsedWeekNumber < 1) {
+        setWeekInputError('1 이상의 주차 번호를 입력해 주세요.')
+        return
+      }
+      if (weeks.some((week) => week.weekNumber === parsedWeekNumber)) {
+        setWeekInputError('이미 있는 주차입니다. 왼쪽 메뉴에서 선택해 수정해 주세요.')
+        return
+      }
+      targetWeekId = `week-${parsedWeekNumber}`
+      onAddWeek(parsedWeekNumber)
+    }
+
+    onSaveClassFormat(targetWeekId, publishedFormat)
     setDraftFormat(cloneClassFormat(publishedFormat))
+    setNewWeekNumber('')
+    setWeekInputError('')
+    setIsBuilderOpen(true)
+    setIsCreatingWeek(false)
     setSaveNotice('수업 포맷이 저장되었습니다.')
     window.setTimeout(() => setSaveNotice(''), 2200)
   }
 
-  const submitNewWeek = () => {
-    const parsedWeekNumber = Number.parseInt(newWeekNumber, 10)
-    if (!Number.isInteger(parsedWeekNumber) || parsedWeekNumber < 1) {
-      setWeekInputError('1 이상의 주차 번호를 입력해 주세요.')
-      return
-    }
-    if (weeks.some((week) => week.weekNumber === parsedWeekNumber)) {
-      setWeekInputError('이미 있는 주차입니다.')
-      return
-    }
-    onAddWeek(parsedWeekNumber)
+  const openNewWeekBuilder = () => {
+    setDraftFormat(cloneClassFormat(createDefaultClassFormat('inClass')))
     setNewWeekNumber('')
     setWeekInputError('')
-    setIsWeekInputOpen(false)
+    setIsCreatingWeek(true)
+    setIsBuilderOpen(true)
+  }
+
+  const selectSavedWeek = (weekId: string) => {
+    const nextWeek = weeks.find((week) => week.id === weekId)
+    onSelectWeek(weekId)
+    if (nextWeek) {
+      setDraftFormat(cloneClassFormat(nextWeek.format))
+    }
+    setIsCreatingWeek(false)
+    setIsBuilderOpen(true)
+    setNewWeekNumber('')
+    setWeekInputError('')
   }
 
   return (
@@ -1229,39 +1260,10 @@ function ClassCreationView({
           <h2>주차별 수업 생성</h2>
           <p>수업 단계와 제출 방식을 주차별로 저장하면 학생 화면도 같은 주차 내용으로 바뀝니다.</p>
         </div>
-        <div className="week-add-control">
-          {isWeekInputOpen && (
-            <label className="week-add-field">
-              <span>추가할 주차</span>
-              <input
-                value={newWeekNumber}
-                inputMode="numeric"
-                placeholder="예: 8"
-                onChange={(event) => {
-                  setNewWeekNumber(event.target.value.replace(/[^0-9]/g, ''))
-                  setWeekInputError('')
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    submitNewWeek()
-                  }
-                }}
-              />
-              {weekInputError && <small>{weekInputError}</small>}
-            </label>
-          )}
-          {isWeekInputOpen ? (
-            <button className="share-button" type="button" onClick={submitNewWeek}>
-              <Plus size={18} />
-              주차 생성
-            </button>
-          ) : (
-            <button className="share-button" type="button" onClick={() => setIsWeekInputOpen(true)}>
-              <Plus size={18} />
-              주차 추가
-            </button>
-          )}
-        </div>
+        <button className="share-button" type="button" onClick={openNewWeekBuilder}>
+          <Plus size={18} />
+          주차 생성
+        </button>
       </div>
 
       <div className="week-workspace">
@@ -1273,11 +1275,11 @@ function ClassCreationView({
           </div>
           <div className="week-list">
             {weeks.map((week) => (
-              <div className={week.id === selectedWeekId ? 'week-list-item active' : 'week-list-item'} key={week.id}>
+              <div className={!isCreatingWeek && week.id === selectedWeekId ? 'week-list-item active' : 'week-list-item'} key={week.id}>
                 <button
                   className="week-button"
                   type="button"
-                  onClick={() => onSelectWeek(week.id)}
+                  onClick={() => selectSavedWeek(week.id)}
                 >
                   <span>{week.weekNumber}주차</span>
                   <strong>{week.format.title}</strong>
@@ -1303,25 +1305,38 @@ function ClassCreationView({
         <div className="week-editor-area">
           <div className="panel selected-week-summary">
             <div>
-              <span className="panel-kicker">Selected Week</span>
+              <span className="panel-kicker">{isCreatingWeek ? 'New Week' : 'Selected Week'}</span>
               <h3>
-                {selectedWeek.weekNumber}주차 · {draftFormat.title}
+                {isCreatingWeek
+                  ? `${newWeekNumber || '새'}주차 · ${selectedSummaryFormat.title || '제목 입력 전'}`
+                  : `${selectedWeek.weekNumber}주차 · ${selectedSummaryFormat.title}`}
               </h3>
-              <p>{draftFormat.description}</p>
+              <p>{selectedSummaryFormat.description || (isCreatingWeek ? '아래 Class Builder에서 주차와 수업 내용을 입력해 저장하세요.' : '')}</p>
             </div>
             <div className="week-summary-badges">
-              <span>{formatPhaseLabels[draftFormat.phase]}</span>
-              <span>{submissionLabels[draftFormat.submissionType]}</span>
-              <span className={draftFormat.publishedAt ? 'saved' : ''}>{draftFormat.publishedAt ? '학생 화면 반영' : '저장 전'}</span>
+              {isCreatingWeek && <span>작성 중</span>}
+              <span>{formatPhaseLabels[selectedSummaryFormat.phase]}</span>
+              <span>{submissionLabels[selectedSummaryFormat.submissionType]}</span>
+              <span className={selectedSummaryFormat.publishedAt ? 'saved' : ''}>{selectedSummaryFormat.publishedAt ? '학생 화면 반영' : '저장 전'}</span>
             </div>
           </div>
 
-          <FormatBuilderPanel
-            draftFormat={draftFormat}
-            classFormats={selectedWeek.formats}
-            onDraftFormatChange={setDraftFormat}
-            onPublish={saveFormat}
-          />
+          {isBuilderOpen && (
+            <FormatBuilderPanel
+              draftFormat={draftFormat}
+              classFormats={selectedWeek.formats}
+              selectedWeekNumber={selectedWeek.weekNumber}
+              isCreatingWeek={isCreatingWeek}
+              newWeekNumber={newWeekNumber}
+              weekInputError={weekInputError}
+              onNewWeekNumberChange={(value) => {
+                setNewWeekNumber(value.replace(/[^0-9]/g, ''))
+                setWeekInputError('')
+              }}
+              onDraftFormatChange={setDraftFormat}
+              onPublish={saveFormat}
+            />
+          )}
           {saveNotice && (
             <div className="format-save-toast" role="status" aria-live="polite">
               <CheckCircle2 size={18} />
@@ -1337,11 +1352,21 @@ function ClassCreationView({
 function FormatBuilderPanel({
   draftFormat,
   classFormats,
+  selectedWeekNumber,
+  isCreatingWeek,
+  newWeekNumber,
+  weekInputError,
+  onNewWeekNumberChange,
   onDraftFormatChange,
   onPublish,
 }: {
   draftFormat: ClassFormat
   classFormats: Record<FormatPhase, ClassFormat>
+  selectedWeekNumber: number
+  isCreatingWeek: boolean
+  newWeekNumber: string
+  weekInputError: string
+  onNewWeekNumberChange: (value: string) => void
   onDraftFormatChange: (format: ClassFormat) => void
   onPublish: (format: ClassFormat) => void
 }) {
@@ -1352,7 +1377,7 @@ function FormatBuilderPanel({
   }
 
   const selectPhase = (phase: FormatPhase) => {
-    onDraftFormatChange(cloneClassFormat(classFormats[phase]))
+    onDraftFormatChange(cloneClassFormat(isCreatingWeek ? createDefaultClassFormat(phase) : classFormats[phase]))
   }
 
   const selectSubmissionType = (submissionType: SubmissionType) => {
@@ -1472,6 +1497,34 @@ function FormatBuilderPanel({
         </span>
       </div>
 
+      <div className="builder-week-control">
+        <div>
+          <span className="builder-step">1. 주차 선정</span>
+          <p>
+            {isCreatingWeek
+              ? '새로 구성할 수업 주차를 입력한 뒤 저장하면 해당 주차가 추가됩니다.'
+              : '왼쪽 메뉴에서 선택한 주차의 저장된 수업 포맷을 확인하고 수정합니다.'}
+          </p>
+        </div>
+        <div className="week-add-control">
+          <label className="week-add-field">
+            <span>{isCreatingWeek ? '저장할 주차' : '선택된 주차'}</span>
+            <input
+              value={isCreatingWeek ? newWeekNumber : `${selectedWeekNumber}`}
+              inputMode="numeric"
+              placeholder="예: 9"
+              readOnly={!isCreatingWeek}
+              onChange={(event) => {
+                if (isCreatingWeek) {
+                  onNewWeekNumberChange(event.target.value)
+                }
+              }}
+            />
+            {weekInputError && <small>{weekInputError}</small>}
+          </label>
+        </div>
+      </div>
+
       <div className="builder-form-grid">
         <label>
           <span>포맷 제목</span>
@@ -1484,7 +1537,7 @@ function FormatBuilderPanel({
       </div>
 
       <div className="format-builder-section">
-        <span className="builder-step">1. 수업 단계</span>
+        <span className="builder-step">2. 수업 단계</span>
         <div className="segmented-control">
           {(['preClass', 'inClass'] as FormatPhase[]).map((phase) => (
             <button
@@ -1500,7 +1553,7 @@ function FormatBuilderPanel({
       </div>
 
       <div className="format-builder-section">
-        <span className="builder-step">2. 제출 방식</span>
+        <span className="builder-step">3. 제출 방식</span>
         <div className="format-choice-grid">
           {(['figmaLink', 'table', 'both'] as SubmissionType[]).map((submissionType) => (
             <button
