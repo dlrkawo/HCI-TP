@@ -53,11 +53,52 @@ type SaveState = 'idle' | 'saved' | 'shared'
 type FeedbackState = 'none' | 'waiting' | 'received'
 type TeamSignal = 'normal' | 'question' | 'blocked' | 'ready'
 type ProfessorView = 'dashboard' | 'classCreation'
+type StudentView = 'workspace' | 'report'
 type DemoFlowStep = {
   label: string
   detail: string
   done: boolean
   active?: boolean
+}
+type ReportStatus = 'draft' | 'submitted'
+type ReportFieldKey =
+  | 'week'
+  | 'course'
+  | 'department'
+  | 'professor'
+  | 'teamName'
+  | 'members'
+  | 'beforeSummary'
+  | 'beforeCheck'
+  | 'inClassDate'
+  | 'attendees'
+  | 'topic'
+  | 'activityContent'
+  | 'discussion'
+  | 'nextPlan'
+  | 'roleDivision'
+  | 'schedule'
+  | 'professorFeedback'
+  | 'presentation'
+  | 'artifactShare'
+  | 'learned'
+  | 'felt'
+  | 'suggestion'
+type ReportFields = Record<ReportFieldKey, string>
+type SubmittedReport = {
+  id: string
+  week: string
+  title: string
+  submittedAt: string
+  fields: ReportFields
+}
+type ReportListItem = {
+  id: string
+  week: string
+  title: string
+  submittedAt: string
+  status: ReportStatus
+  readOnly: boolean
 }
 
 const statusMeta: Record<TeamStatus, { label: string; className: string }> = {
@@ -170,6 +211,189 @@ const signalOptions: Array<{
     detail: '요약과 근거를 공유할 준비가 되었습니다.',
     previewLabel: '발표 준비',
     className: 'ready',
+  },
+]
+
+const reportRequiredFields: ReportFieldKey[] = [
+  'week',
+  'course',
+  'department',
+  'professor',
+  'teamName',
+  'members',
+  'beforeSummary',
+  'beforeCheck',
+  'inClassDate',
+  'attendees',
+  'topic',
+  'activityContent',
+  'discussion',
+  'nextPlan',
+  'roleDivision',
+  'schedule',
+  'presentation',
+  'artifactShare',
+  'learned',
+  'felt',
+]
+
+const reportSections: Array<{
+  eyebrow: string
+  title: string
+  description: string
+  fields: Array<{
+    key: ReportFieldKey
+    label: string
+    multiline?: boolean
+    note?: string
+  }>
+}> = [
+  {
+    eyebrow: '1. Before Class',
+    title: '사전학습',
+    description: '수업 전에 확인한 학습 내용과 점검 활동을 정리합니다.',
+    fields: [
+      { key: 'beforeSummary', label: '사전학습내용 요약', multiline: true },
+      { key: 'beforeCheck', label: '사전학습점검 활동', multiline: true },
+    ],
+  },
+  {
+    eyebrow: '2. In Class',
+    title: '수업 중 활동',
+    description: '팀 활동 개요, 진행사항, 추후 계획을 작성합니다.',
+    fields: [
+      { key: 'inClassDate', label: '일시' },
+      { key: 'attendees', label: '참석자' },
+      { key: 'topic', label: '활동 주제' },
+      { key: 'activityContent', label: '활동 내용', multiline: true },
+      { key: 'discussion', label: '논의 사항', multiline: true },
+      { key: 'nextPlan', label: '활동 계획', multiline: true },
+      { key: 'roleDivision', label: '역할분담', multiline: true },
+      { key: 'schedule', label: '추진 일정', multiline: true },
+      { key: 'professorFeedback', label: '교수자 피드백', multiline: true },
+    ],
+  },
+  {
+    eyebrow: '3. After Class',
+    title: '발표 및 성찰',
+    description: '발표 결과와 팀 성찰 내용을 수업 후 보고서로 남깁니다.',
+    fields: [
+      { key: 'presentation', label: '발표 내용', multiline: true },
+      { key: 'artifactShare', label: '결과물 공유', multiline: true, note: '사진 첨부 가능 항목은 링크 또는 설명으로 남깁니다.' },
+      { key: 'learned', label: '배운 점', multiline: true },
+      { key: 'felt', label: '느낀 점', multiline: true },
+      { key: 'suggestion', label: '건의 사항', multiline: true },
+    ],
+  },
+]
+
+const reportFieldLabels: Record<ReportFieldKey, string> = {
+  week: '주차(차시)',
+  course: '교과목명',
+  department: '학과',
+  professor: '담당교수',
+  teamName: '팀명',
+  members: '팀원',
+  beforeSummary: '사전학습내용 요약',
+  beforeCheck: '사전학습점검 활동',
+  inClassDate: '일시',
+  attendees: '참석자',
+  topic: '활동 주제',
+  activityContent: '활동 내용',
+  discussion: '논의 사항',
+  nextPlan: '활동 계획',
+  roleDivision: '역할분담',
+  schedule: '추진 일정',
+  professorFeedback: '교수자 피드백',
+  presentation: '발표 내용',
+  artifactShare: '결과물 공유',
+  learned: '배운 점',
+  felt: '느낀 점',
+  suggestion: '건의 사항',
+}
+
+const createReportFields = (fields: Partial<ReportFields>): ReportFields => ({
+  week: '',
+  course: '',
+  department: '',
+  professor: '',
+  teamName: '',
+  members: '',
+  beforeSummary: '',
+  beforeCheck: '',
+  inClassDate: '',
+  attendees: '',
+  topic: '',
+  activityContent: '',
+  discussion: '',
+  nextPlan: '',
+  roleDivision: '',
+  schedule: '',
+  professorFeedback: '',
+  presentation: '',
+  artifactShare: '',
+  learned: '',
+  felt: '',
+  suggestion: '',
+  ...fields,
+})
+
+const submittedReportSamples: SubmittedReport[] = [
+  {
+    id: 'report-week-6',
+    week: '6주차',
+    title: '6주차 팀 보고서',
+    submittedAt: '2026.06.07 제출',
+    fields: createReportFields({
+      week: '6주차',
+      course: 'HCI',
+      department: 'IT융합전공',
+      professor: '고동현',
+      teamName: '3조',
+      members: '김철수, 고길동, 고영희',
+      inClassDate: '2026.06.07',
+      attendees: '김철수, 고길동, 고영희',
+      topic: '사용자 인터뷰 결과 정리',
+      beforeSummary: '플립러닝 수업에서 팀 활동 기록과 교수자 확인 흐름을 사전 자료로 확인했습니다.',
+      beforeCheck: '각자 인터뷰 질문을 준비하고 핵심 불편함 후보를 정리했습니다.',
+      activityContent: '인터뷰 응답을 공통 주제로 묶고 교수자 대시보드에서 먼저 보여야 할 상태를 논의했습니다.',
+      discussion: '활동 없음, 질문 있음, 링크 문제 중 어떤 상태가 수업 중 개입 우선순위가 높은지 비교했습니다.',
+      nextPlan: '학생 화면에서 팀 상태를 짧게 공유하는 입력 흐름을 프로토타입으로 만들기로 했습니다.',
+      roleDivision: '김철수: 인터뷰 요약, 고길동: 플로우 정리, 고영희: 화면 구성',
+      schedule: '다음 주까지 학생용 활동 공간 초안을 완성합니다.',
+      presentation: '인터뷰 기반 문제 정의와 우선순위 기준을 발표했습니다.',
+      artifactShare: '피그마 보드에 인터뷰 affinity map과 초기 화면 흐름을 공유했습니다.',
+      learned: '팀 활동 상태를 빠르게 파악하려면 입력 항목이 짧고 구조화되어야 한다는 점을 배웠습니다.',
+      felt: '교수자와 학생이 보는 정보가 다르기 때문에 화면 목적을 분리하는 것이 중요하다고 느꼈습니다.',
+    }),
+  },
+  {
+    id: 'report-week-5',
+    week: '5주차',
+    title: '5주차 팀 보고서',
+    submittedAt: '2026.05.31 제출',
+    fields: createReportFields({
+      week: '5주차',
+      course: 'HCI',
+      department: 'IT융합전공',
+      professor: '고동현',
+      teamName: '3조',
+      members: '김철수, 고길동, 고영희',
+      inClassDate: '2026.05.31',
+      attendees: '김철수, 고길동, 고영희',
+      topic: '문제 상황과 이해관계자 정리',
+      beforeSummary: '기존 LMS에서 팀 활동 확인이 어려운 상황을 정리했습니다.',
+      beforeCheck: '학생 관점과 교수자 관점의 불편함을 구분했습니다.',
+      activityContent: '사용자 역할을 학생, 교수자, 조교로 나누고 각자의 핵심 니즈를 작성했습니다.',
+      discussion: '학생은 작성 부담을 줄이고 싶어하고 교수자는 즉시 개입할 근거를 필요로 한다는 점을 확인했습니다.',
+      nextPlan: '수업 중 짧게 제출하는 체크포인트 UI를 설계합니다.',
+      roleDivision: '김철수: 문제 정의, 고길동: 사용자 흐름, 고영희: 화면 초안',
+      schedule: '다음 수업 전까지 학생용 UI 구조를 정리합니다.',
+      presentation: '문제 상황과 사용자별 요구를 공유했습니다.',
+      artifactShare: '팀 노션에 문제 정의와 초기 화면 스케치를 정리했습니다.',
+      learned: '같은 기능도 사용자 역할에 따라 전혀 다른 화면으로 설계해야 한다는 점을 배웠습니다.',
+      felt: '수업 중 교수자가 바로 확인할 수 있는 정보의 우선순위가 중요하다고 느꼈습니다.',
+    }),
   },
 ]
 
@@ -288,9 +512,14 @@ function App() {
     setStudentTableResponses({})
   }
 
-  const addClassWeek = () => {
-    const nextWeekNumber = Math.max(...classWeeks.map((week) => week.weekNumber)) + 1
-    const nextWeek = createClassWeek(nextWeekNumber)
+  const addClassWeek = (weekNumber: number) => {
+    const existingWeek = classWeeks.find((week) => week.weekNumber === weekNumber)
+    if (existingWeek) {
+      setSelectedWeekId(existingWeek.id)
+      setStudentTableResponses({})
+      return
+    }
+    const nextWeek = createClassWeek(weekNumber)
     setClassWeeks((currentWeeks) => [...currentWeeks, nextWeek])
     setSelectedWeekId(nextWeek.id)
     setStudentTableResponses({})
@@ -356,7 +585,7 @@ function ProfessorDashboard({
   selectedWeek: ClassWeek
   selectedWeekId: string
   onSelectWeek: (weekId: string) => void
-  onAddWeek: () => void
+  onAddWeek: (weekNumber: number) => void
   onSaveClassFormat: (weekId: string, format: ClassFormat) => void
 }) {
   const [activeProfessorView, setActiveProfessorView] = useState<ProfessorView>('dashboard')
@@ -798,10 +1027,14 @@ function ClassCreationView({
   selectedWeek: ClassWeek
   selectedWeekId: string
   onSelectWeek: (weekId: string) => void
-  onAddWeek: () => void
+  onAddWeek: (weekNumber: number) => void
   onSaveClassFormat: (weekId: string, format: ClassFormat) => void
 }) {
   const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(selectedWeek.format))
+  const [isWeekInputOpen, setIsWeekInputOpen] = useState(false)
+  const [newWeekNumber, setNewWeekNumber] = useState('')
+  const [weekInputError, setWeekInputError] = useState('')
+  const [saveNotice, setSaveNotice] = useState('')
 
   const saveFormat = (format: ClassFormat) => {
     const publishedFormat = {
@@ -810,6 +1043,24 @@ function ClassCreationView({
     }
     onSaveClassFormat(selectedWeek.id, publishedFormat)
     setDraftFormat(cloneClassFormat(publishedFormat))
+    setSaveNotice('수업 포맷이 저장되었습니다.')
+    window.setTimeout(() => setSaveNotice(''), 2200)
+  }
+
+  const submitNewWeek = () => {
+    const parsedWeekNumber = Number.parseInt(newWeekNumber, 10)
+    if (!Number.isInteger(parsedWeekNumber) || parsedWeekNumber < 1) {
+      setWeekInputError('1 이상의 주차 번호를 입력해 주세요.')
+      return
+    }
+    if (weeks.some((week) => week.weekNumber === parsedWeekNumber)) {
+      setWeekInputError('이미 있는 주차입니다.')
+      return
+    }
+    onAddWeek(parsedWeekNumber)
+    setNewWeekNumber('')
+    setWeekInputError('')
+    setIsWeekInputOpen(false)
   }
 
   return (
@@ -819,10 +1070,39 @@ function ClassCreationView({
           <h2>주차별 수업 생성</h2>
           <p>수업 단계와 제출 방식을 주차별로 저장하면 학생 화면도 같은 주차 내용으로 바뀝니다.</p>
         </div>
-        <button className="share-button" type="button" onClick={onAddWeek}>
-          <Plus size={18} />
-          주차 추가
-        </button>
+        <div className="week-add-control">
+          {isWeekInputOpen && (
+            <label className="week-add-field">
+              <span>추가할 주차</span>
+              <input
+                value={newWeekNumber}
+                inputMode="numeric"
+                placeholder="예: 8"
+                onChange={(event) => {
+                  setNewWeekNumber(event.target.value.replace(/[^0-9]/g, ''))
+                  setWeekInputError('')
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    submitNewWeek()
+                  }
+                }}
+              />
+              {weekInputError && <small>{weekInputError}</small>}
+            </label>
+          )}
+          {isWeekInputOpen ? (
+            <button className="share-button" type="button" onClick={submitNewWeek}>
+              <Plus size={18} />
+              주차 생성
+            </button>
+          ) : (
+            <button className="share-button" type="button" onClick={() => setIsWeekInputOpen(true)}>
+              <Plus size={18} />
+              주차 추가
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="week-workspace">
@@ -865,6 +1145,12 @@ function ClassCreationView({
           </div>
 
           <FormatBuilderPanel draftFormat={draftFormat} onDraftFormatChange={setDraftFormat} onPublish={saveFormat} />
+          {saveNotice && (
+            <div className="format-save-toast" role="status" aria-live="polite">
+              <CheckCircle2 size={18} />
+              <span>{saveNotice}</span>
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -1312,14 +1598,30 @@ function StudentWorkspace({
     blocked: '링크 문제와 활동 없음 중 어떤 알림을 먼저 보여줄지 확인이 필요합니다.',
     question: '링크 문제와 활동 없음 중 어떤 상황을 더 높은 우선순위로 봐야 할까요?',
   })
-  const [figmaUrl, setFigmaUrl] = useState('https://www.figma.com/design/abc123/team3')
+  const [figmaUrl, setFigmaUrl] = useState('')
   const [linkStatus, setLinkStatus] = useState<LinkStatus>('unchecked')
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [lastSharedAt, setLastSharedAt] = useState('아직 공유 전')
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('none')
   const [teamSignal, setTeamSignal] = useState<TeamSignal>('normal')
   const [lastSignalAt, setLastSignalAt] = useState('방금 전송됨')
+  const [signalNotice, setSignalNotice] = useState('')
   const [isFinalized, setIsFinalized] = useState(false)
+  const [studentView, setStudentView] = useState<StudentView>('workspace')
+  const [reportFields, setReportFields] = useState<ReportFields>(
+    createReportFields({
+      week: `${selectedWeek.weekNumber}주차`,
+      course: 'HCI',
+      department: 'IT융합전공',
+      professor: '고동현',
+      teamName: '3조',
+      members: '김철수, 고길동, 고영희',
+    }),
+  )
+  const [reportStatus, setReportStatus] = useState<ReportStatus>('draft')
+  const [lastReportSubmittedAt, setLastReportSubmittedAt] = useState('미제출')
+  const [selectedReportId, setSelectedReportId] = useState('current')
+  const [submittedReports, setSubmittedReports] = useState<SubmittedReport[]>(submittedReportSamples)
   const [lastFinalizedAt, setLastFinalizedAt] = useState('마무리 전')
 
   const classFormat = selectedWeek.format
@@ -1515,6 +1817,36 @@ function StudentWorkspace({
           detail: '스냅샷 공유와 교수자 피드백 확인이 끝나면 발표 준비를 완료할 수 있습니다.',
         }
 
+  const selectedSubmittedReport = submittedReports.find((report) => report.id === selectedReportId)
+  const isReportReadOnly = selectedReportId !== 'current'
+  const activeReportFields = selectedSubmittedReport?.fields ?? reportFields
+  const activeReportStatus: ReportStatus = isReportReadOnly ? 'submitted' : reportStatus
+  const activeReportSubmittedAt = selectedSubmittedReport?.submittedAt ?? lastReportSubmittedAt
+  const missingReportFields = reportRequiredFields.filter((key) => activeReportFields[key].trim().length === 0)
+  const reportProgress = Math.round(((reportRequiredFields.length - missingReportFields.length) / reportRequiredFields.length) * 100)
+  const canSubmitReport = !isReportReadOnly && missingReportFields.length === 0
+  const currentReportList: ReportListItem[] = reportStatus === 'submitted' ? [] : [
+    {
+      id: 'current',
+      week: reportFields.week || `${selectedWeek.weekNumber}주차`,
+      title: `${reportFields.week || `${selectedWeek.weekNumber}주차`} 팀 보고서`,
+      submittedAt: lastReportSubmittedAt,
+      status: reportStatus,
+      readOnly: false,
+    },
+  ]
+  const reportList: ReportListItem[] = [
+    ...currentReportList,
+    ...submittedReports.map((report) => ({
+      id: report.id,
+      week: report.week,
+      title: report.title,
+      submittedAt: report.submittedAt,
+      status: 'submitted' as ReportStatus,
+      readOnly: true,
+    })),
+  ]
+
   const handleFieldChange = (key: keyof typeof fields) => (event: ChangeEvent<HTMLTextAreaElement>) => {
     setFields((current) => ({ ...current, [key]: event.target.value }))
     if (snapshotShared) {
@@ -1538,6 +1870,29 @@ function StudentWorkspace({
     setFeedbackState('none')
     setIsFinalized(false)
     setLastFinalizedAt('표 수정 후 다시 완료 필요')
+  }
+
+  const handleReportFieldChange = (key: ReportFieldKey) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setReportFields((current) => ({ ...current, [key]: event.target.value }))
+    setReportStatus('draft')
+    setLastReportSubmittedAt('미제출')
+    setSelectedReportId('current')
+  }
+
+  const submitReport = () => {
+    if (!canSubmitReport) return
+    const submittedAt = '방금 제출됨'
+    const submittedReport: SubmittedReport = {
+      id: `report-${Date.now()}`,
+      week: reportFields.week || `${selectedWeek.weekNumber}주차`,
+      title: `${reportFields.week || `${selectedWeek.weekNumber}주차`} 팀 보고서`,
+      submittedAt,
+      fields: createReportFields(reportFields),
+    }
+    setSubmittedReports((current) => [submittedReport, ...current])
+    setReportStatus('submitted')
+    setLastReportSubmittedAt(submittedAt)
+    setSelectedReportId(submittedReport.id)
   }
 
   const changeMode = (nextMode: WorkspaceMode) => {
@@ -1571,8 +1926,11 @@ function StudentWorkspace({
   }
 
   const sendTeamSignal = (nextSignal: TeamSignal) => {
+    const nextSignalLabel = signalOptions.find((option) => option.value === nextSignal)?.label ?? '팀 신호'
     setTeamSignal(nextSignal)
     setLastSignalAt('방금 전송됨')
+    setSignalNotice(`${nextSignalLabel} 알림을 교수자에게 보냈습니다.`)
+    window.setTimeout(() => setSignalNotice(''), 2200)
     if (isFinalized && nextSignal !== 'ready') {
       setIsFinalized(false)
       setLastFinalizedAt('팀 신호 변경 후 다시 완료 필요')
@@ -1631,9 +1989,29 @@ function StudentWorkspace({
       </header>
 
       <div className="student-layout">
-        <StudentSidebar />
+        <StudentSidebar
+          activeView={studentView}
+          onViewChange={setStudentView}
+          reportSubmitted={reportStatus === 'submitted' || submittedReports.length > submittedReportSamples.length}
+        />
 
         <main className="workspace-main">
+          {studentView === 'report' ? (
+            <StudentReportForm
+              fields={activeReportFields}
+              status={activeReportStatus}
+              progress={reportProgress}
+              canSubmit={canSubmitReport}
+              lastSubmittedAt={activeReportSubmittedAt}
+              readOnly={isReportReadOnly}
+              reports={reportList}
+              selectedReportId={selectedReportId}
+              onSelectReport={setSelectedReportId}
+              onFieldChange={handleReportFieldChange}
+              onSubmit={submitReport}
+            />
+          ) : (
+            <>
           <section className="workspace-head">
             <h1>팀 활동 공간</h1>
             <p>교수자가 팀 상태를 먼저 파악할 수 있도록 10-20초 안에 읽히는 체크포인트를 공유합니다.</p>
@@ -1723,6 +2101,12 @@ function StudentWorkspace({
                 </button>
               ))}
             </div>
+            {signalNotice && (
+              <div className="signal-toast" role="status" aria-live="polite">
+                <CheckCircle2 size={18} />
+                <span>{signalNotice}</span>
+              </div>
+            )}
           </section>
 
           <div className={`workspace-grid ${activeFormat ? (activeFormat.submissionType === 'both' ? 'two-column' : 'single-column') : mode === 'both' ? 'two-column' : 'single-column'}`}>
@@ -1907,10 +2291,24 @@ function StudentWorkspace({
               {isFinalized ? '완료됨' : '발표 준비 완료'}
             </button>
           </section>
+            </>
+          )}
         </main>
 
         <aside className="professor-preview">
-          <DemoFlowPanel steps={demoFlowSteps} />
+          {studentView === 'report' ? (
+            <ReportSubmitPreview
+              fields={activeReportFields}
+              status={activeReportStatus}
+              progress={reportProgress}
+              missingFields={missingReportFields}
+              lastSubmittedAt={activeReportSubmittedAt}
+              readOnly={isReportReadOnly}
+              canSubmit={canSubmitReport}
+              onSubmit={submitReport}
+            />
+          ) : (
+            <>
           <h2>교수자 화면 미리보기</h2>
           <p>
             <Eye size={17} />
@@ -2007,19 +2405,304 @@ function StudentWorkspace({
               </button>
             )}
           </div>
+            </>
+          )}
         </aside>
       </div>
     </div>
   )
 }
 
-function StudentSidebar() {
+function StudentReportForm({
+  fields,
+  status,
+  progress,
+  canSubmit,
+  lastSubmittedAt,
+  readOnly,
+  reports,
+  selectedReportId,
+  onSelectReport,
+  onFieldChange,
+  onSubmit,
+}: {
+  fields: ReportFields
+  status: ReportStatus
+  progress: number
+  canSubmit: boolean
+  lastSubmittedAt: string
+  readOnly: boolean
+  reports: ReportListItem[]
+  selectedReportId: string
+  onSelectReport: (reportId: string) => void
+  onFieldChange: (key: ReportFieldKey) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void
+  onSubmit: () => void
+}) {
+  const basicFields: ReportFieldKey[] = ['week', 'course', 'department', 'professor', 'teamName', 'members']
+
+  return (
+    <section className="report-workspace">
+      <div className="report-board">
+        <aside className="report-history-panel" aria-label="주차별 보고서 목록">
+          <div>
+            <span>보고서 목록</span>
+            <h2>주차별 제출본</h2>
+            <p>제출된 보고서는 읽기 전용으로 보관됩니다.</p>
+          </div>
+          <div className="report-history-list">
+            {reports.map((report) => (
+              <button
+                className={selectedReportId === report.id ? 'report-history-item active' : 'report-history-item'}
+                type="button"
+                key={report.id}
+                onClick={() => onSelectReport(report.id)}
+              >
+                <strong>{report.week}</strong>
+                <span>{report.title}</span>
+                <small>{report.status === 'submitted' ? report.submittedAt : '작성 중'}</small>
+                {report.readOnly && <em>읽기 전용</em>}
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="report-form-panel">
+          <div className="report-hero">
+            <span className={`report-status ${status}`}>{status === 'submitted' ? '제출 완료' : '작성 중'}</span>
+            <h1>Flipped Learning 주차별 팀 보고서</h1>
+            <p>{readOnly ? '제출 완료된 보고서는 내용 확인만 가능하며 수정할 수 없습니다.' : '학생용 보고서 양식을 그대로 옮겨 팀이 직접 작성하고 제출할 수 있습니다.'}</p>
+            <div className="report-progress-row">
+              <span>필수 항목 {progress}% 작성</span>
+              <div className="report-progress-track">
+                <span style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          </div>
+
+          <section className="report-card">
+            <div className="report-section-head">
+              <div>
+                <span>기본 정보</span>
+                <h2>보고서 정보</h2>
+              </div>
+              <small>{lastSubmittedAt}</small>
+            </div>
+            <div className="report-basic-grid">
+              {basicFields.map((key) => (
+                <ReportInput label={reportFieldLabels[key]} value={fields[key]} readOnly={readOnly} onChange={onFieldChange(key)} key={key} />
+              ))}
+            </div>
+          </section>
+
+          {reportSections.map((section) => (
+            <section className="report-card" key={section.eyebrow}>
+              <div className="report-section-head">
+                <div>
+                  <span>{section.eyebrow}</span>
+                  <h2>{section.title}</h2>
+                  <p>{section.description}</p>
+                </div>
+              </div>
+              <div className="report-field-grid">
+                {section.fields.map((field) =>
+                  field.multiline ? (
+                    <ReportTextarea
+                      label={field.label}
+                      value={fields[field.key]}
+                      note={field.note}
+                      readOnly={readOnly}
+                      onChange={onFieldChange(field.key)}
+                      key={field.key}
+                    />
+                  ) : (
+                    <ReportInput
+                      label={field.label}
+                      value={fields[field.key]}
+                      readOnly={readOnly}
+                      onChange={onFieldChange(field.key)}
+                      key={field.key}
+                    />
+                  ),
+                )}
+              </div>
+            </section>
+          ))}
+
+          <section className="report-submit-strip">
+            <span>
+              <ShieldCheck size={22} />
+              {readOnly
+                ? '제출 완료된 보고서는 수정할 수 없습니다.'
+                : canSubmit
+                  ? '필수 항목이 모두 채워졌습니다.'
+                  : '필수 항목을 작성하면 제출할 수 있습니다.'}
+            </span>
+            {!readOnly && (
+              <button className="share-button" type="button" onClick={onSubmit} disabled={!canSubmit || status === 'submitted'}>
+                <Send size={18} />
+                {status === 'submitted' ? '제출 완료' : '보고서 제출'}
+              </button>
+            )}
+          </section>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ReportInput({
+  label,
+  value,
+  readOnly,
+  onChange,
+}: {
+  label: string
+  value: string
+  readOnly: boolean
+  onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void
+}) {
+  return (
+    <label className="report-field">
+      <span>{label}</span>
+      <input value={value} onChange={onChange} readOnly={readOnly} />
+    </label>
+  )
+}
+
+function ReportTextarea({
+  label,
+  value,
+  note,
+  readOnly,
+  onChange,
+}: {
+  label: string
+  value: string
+  note?: string
+  readOnly: boolean
+  onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void
+}) {
+  return (
+    <label className="report-field full">
+      <span>{label}</span>
+      <textarea value={value} onChange={onChange} rows={4} readOnly={readOnly} />
+      {note && <small>{note}</small>}
+    </label>
+  )
+}
+
+function ReportSubmitPreview({
+  fields,
+  status,
+  progress,
+  missingFields,
+  lastSubmittedAt,
+  canSubmit,
+  readOnly,
+  onSubmit,
+}: {
+  fields: ReportFields
+  status: ReportStatus
+  progress: number
+  missingFields: ReportFieldKey[]
+  lastSubmittedAt: string
+  canSubmit: boolean
+  readOnly: boolean
+  onSubmit: () => void
+}) {
+  return (
+    <>
+      <h2>보고서 제출</h2>
+      <p>
+        <FileText size={17} />
+        주차별 팀 보고서
+      </p>
+      <div className="snapshot-state-row">
+        <span className={`snapshot-state ${status === 'submitted' ? 'shared' : 'idle'}`}>
+          {status === 'submitted' ? '제출 완료' : '작성 중'}
+        </span>
+        <span>{progress}% 작성</span>
+        <span>{lastSubmittedAt}</span>
+      </div>
+      <article className="preview-card report-preview-card">
+        <div className="preview-team">
+          <BarChart3 size={24} />
+          <strong>{fields.teamName || '팀명 미입력'}</strong>
+          <span className={`status-pill signal-pill ${status === 'submitted' ? 'ready' : 'normal'}`}>
+            <span />
+            {status === 'submitted' ? '제출됨' : '작성 중'}
+          </span>
+        </div>
+        <div className="preview-row">
+          <span>주차</span>
+          <strong>{fields.week || '-'}</strong>
+        </div>
+        <hr />
+        <div className="preview-row">
+          <span>교과목</span>
+          <strong>{fields.course || '-'}</strong>
+        </div>
+        <hr />
+        <div className="preview-row">
+          <span>팀원</span>
+          <strong>{fields.members || '미입력'}</strong>
+        </div>
+        <hr />
+        <div className="preview-summary">
+          <span>사전학습 요약</span>
+          <p>{fields.beforeSummary || '작성된 내용이 없습니다.'}</p>
+        </div>
+        <hr />
+        <div className="preview-summary">
+          <span>수업 중 활동</span>
+          <p>{fields.activityContent || '작성된 내용이 없습니다.'}</p>
+        </div>
+      </article>
+      <div className="snapshot-checklist">
+        {missingFields.length === 0 ? (
+          <span className="done">
+            <CheckCircle2 size={16} />
+            필수 항목 작성 완료
+          </span>
+        ) : (
+          missingFields.slice(0, 6).map((key) => (
+            <span className="pending" key={key}>
+              <Clock3 size={16} />
+              {reportFieldLabels[key]} 필요
+            </span>
+          ))
+        )}
+      </div>
+      {readOnly ? (
+        <div className="report-readonly-note">
+          <ShieldCheck size={18} />
+          제출된 보고서는 수정할 수 없습니다.
+        </div>
+      ) : (
+        <button className="share-button report-submit-button" type="button" onClick={onSubmit} disabled={!canSubmit || status === 'submitted'}>
+          <Send size={18} />
+          {status === 'submitted' ? '제출 완료' : '보고서 제출'}
+        </button>
+      )}
+    </>
+  )
+}
+
+function StudentSidebar({
+  activeView,
+  onViewChange,
+  reportSubmitted,
+}: {
+  activeView: StudentView
+  onViewChange: (view: StudentView) => void
+  reportSubmitted: boolean
+}) {
   const items = [
-    { label: '오늘 수업', icon: CalendarDays },
-    { label: '팀 공간', icon: Users, active: true },
+    { label: '오늘 수업', icon: CalendarDays, view: 'workspace' as StudentView },
+    { label: '팀 공간', icon: Users, view: 'workspace' as StudentView },
     { label: '수업 자료', icon: FileText },
     { label: '질문', icon: HelpCircle, badge: 2 },
-    { label: '보고서', icon: BarChart3 },
+    { label: '보고서', icon: BarChart3, view: 'report' as StudentView, badge: reportSubmitted ? '완료' : undefined },
   ]
 
   return (
@@ -2027,8 +2710,16 @@ function StudentSidebar() {
       <nav>
         {items.map((item) => {
           const Icon = item.icon
+          const isActive =
+            item.view === 'report' ? activeView === 'report' : item.label === '팀 공간' && activeView === 'workspace'
           return (
-            <button className={item.active ? 'student-nav active' : 'student-nav'} type="button" key={item.label}>
+            <button
+              className={isActive ? 'student-nav active' : 'student-nav'}
+              type="button"
+              key={item.label}
+              onClick={() => item.view && onViewChange(item.view)}
+              aria-current={isActive ? 'page' : undefined}
+            >
               <Icon size={22} />
               {item.label}
               {item.badge && <span>{item.badge}</span>}
