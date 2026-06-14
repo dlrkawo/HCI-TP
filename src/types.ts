@@ -4,6 +4,13 @@ export type ArtifactType = 'table' | 'figma' | 'mixed'
 
 export type LinkStatus = 'ok' | 'denied' | 'unchecked'
 
+export type TeamReadiness = 'ready' | 'blocked' | 'inProgress' | 'waiting'
+
+export type StudentChecklistItem = {
+  label: string
+  done: boolean
+}
+
 export type Team = {
   id: number
   name: string
@@ -17,6 +24,11 @@ export type Team = {
   summary: string
   question?: string
   figmaUrl?: string
+  readiness: TeamReadiness
+  needsHelp: boolean
+  professorFeedback: string
+  checklist: StudentChecklistItem[]
+  noticeCount: number
 }
 
 export type Alert = {
@@ -38,4 +50,19 @@ export type FeedbackSummary = {
   label: string
   count: number
   note: string
+}
+
+export type PresentationQueueItem = {
+  teamId: number
+  status: TeamReadiness
+  label: string
+  detail: string
+}
+
+export type ClassNotice = {
+  id: number
+  title: string
+  body: string
+  target: string
+  tone: 'link' | 'question' | 'inactive'
 }

@@ -27,8 +27,8 @@ import {
 } from 'lucide-react'
 import { ChangeEvent, useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
-import { alerts, feedbackSummary, teams, timeline } from './data/mockClass'
-import type { Alert, ArtifactType, LinkStatus, Team, TeamStatus } from './types'
+import { alerts, classNotices, feedbackSummary, presentationQueue, teams, timeline } from './data/mockClass'
+import type { Alert, ArtifactType, ClassNotice, LinkStatus, Team, TeamReadiness, TeamStatus } from './types'
 
 type TeamFilter = 'all' | TeamStatus
 type SortMode = 'team' | 'status' | 'activity'
@@ -150,6 +150,13 @@ const signalOptions: Array<{
   },
 ]
 
+const readinessMeta: Record<TeamReadiness, { label: string; className: string }> = {
+  ready: { label: '발표 가능', className: 'ready' },
+  blocked: { label: '확인 필요', className: 'blocked' },
+  inProgress: { label: '진행 중', className: 'in-progress' },
+  waiting: { label: '피드백 대기', className: 'waiting' },
+}
+
 function isValidFigmaFileUrl(url: string) {
   const normalizedUrl = url.trim().toLowerCase()
   return normalizedUrl.includes('figma.com/design') || normalizedUrl.includes('figma.com/file')
@@ -169,6 +176,12 @@ function App() {
 function ProfessorDashboard() {
   const [filter, setFilter] = useState<TeamFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('team')
+  const [selectedTeamId, setSelectedTeamId] = useState(3)
+  const [privateNotes, setPrivateNotes] = useState<Record<number, string>>({
+    3: '발표 전 링크 권한을 먼저 확인시키기',
+  })
+  const [isNoticeOpen, setIsNoticeOpen] = useState(false)
+  const [selectedNoticeId, setSelectedNoticeId] = useState(classNotices[0].id)
 
   const visibleTeams = useMemo(() => {
     const filtered = filter === 'all' ? teams : teams.filter((team) => team.status === filter)
@@ -196,6 +209,8 @@ function ProfessorDashboard() {
     submitted: teams.filter((team) => team.status === 'submitted').length,
     linkIssues: teams.filter((team) => team.status === 'linkIssue').length,
   }
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0]
+  const selectedNotice = classNotices.find((notice) => notice.id === selectedNoticeId) ?? classNotices[0]
 
   return (
     <div className="professor-app">
@@ -256,16 +271,36 @@ function ProfessorDashboard() {
 
             <div className="team-grid">
               {visibleTeams.map((team) => (
-                <TeamCard key={team.id} team={team} />
+                <TeamCard
+                  key={team.id}
+                  team={team}
+                  selected={team.id === selectedTeam.id}
+                  onSelect={() => setSelectedTeamId(team.id)}
+                />
               ))}
             </div>
 
-            <QuickClassActions />
+            <TeamSnapshotPanel
+              team={selectedTeam}
+              note={privateNotes[selectedTeam.id] ?? ''}
+              onNoteChange={(value) => setPrivateNotes((current) => ({ ...current, [selectedTeam.id]: value }))}
+            />
+
+            <QuickClassActions onNoticeOpen={() => setIsNoticeOpen((current) => !current)} />
+            {isNoticeOpen && (
+              <NoticeRecommendationPanel
+                notices={classNotices}
+                selectedNotice={selectedNotice}
+                selectedNoticeId={selectedNoticeId}
+                onSelectNotice={setSelectedNoticeId}
+              />
+            )}
             <FeedbackPanel />
           </section>
 
           <aside className="insight-rail" aria-label="수업 인사이트">
             <ActionNeededPanel />
+            <PresentationQueuePanel selectedTeamId={selectedTeam.id} onSelectTeam={setSelectedTeamId} />
             <ClassPulse pulse={pulse} />
             <TimelinePanel />
           </aside>
@@ -318,12 +353,23 @@ function ProfessorSidebar() {
   )
 }
 
-function TeamCard({ team }: { team: Team }) {
+function TeamCard({ team, selected, onSelect }: { team: Team; selected: boolean; onSelect: () => void }) {
   const meta = statusMeta[team.status]
   const isProblem = team.status === 'linkIssue' || team.status === 'inactive'
 
   return (
-    <article className={`team-card ${meta.className}`}>
+    <article
+      className={`team-card ${meta.className}${selected ? ' selected' : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect()
+        }
+      }}
+    >
       <div className="team-card-top">
         <h3>{team.name}</h3>
         <span className={`status-pill ${meta.className}`}>
@@ -355,11 +401,125 @@ function TeamCard({ team }: { team: Team }) {
           <Clock3 size={16} />
           {team.lastActivity}
         </span>
-        <button className={isProblem ? 'primary-mini' : 'icon-link'} type="button">
+        <button
+          className={isProblem ? 'primary-mini' : 'icon-link'}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onSelect()
+          }}
+        >
           {isProblem ? '필요할 때 열기' : <ChevronRight size={18} />}
         </button>
       </div>
     </article>
+  )
+}
+
+function TeamSnapshotPanel({
+  team,
+  note,
+  onNoteChange,
+}: {
+  team: Team
+  note: string
+  onNoteChange: (value: string) => void
+}) {
+  const meta = statusMeta[team.status]
+  const readiness = readinessMeta[team.readiness]
+
+  return (
+    <section className="panel team-snapshot-panel" aria-label="팀 활동 스냅샷">
+      <div className="snapshot-header">
+        <div>
+          <span className="panel-kicker">Team Activity Snapshot</span>
+          <h3>{team.name} 활동 스냅샷</h3>
+          <p>요약을 먼저 보고, 필요한 팀만 링크나 산출물을 깊게 확인합니다.</p>
+        </div>
+        <div className="snapshot-badges">
+          <span className={`status-pill ${meta.className}`}>
+            <span />
+            {meta.label}
+          </span>
+          <span className={`readiness-pill ${readiness.className}`}>{readiness.label}</span>
+        </div>
+      </div>
+
+      <div className="snapshot-grid">
+        <div className="snapshot-block wide">
+          <span>활동 요약</span>
+          <p>{team.summary}</p>
+        </div>
+        <div className="snapshot-block">
+          <span>링크 권한</span>
+          <strong className={`link-badge ${team.linkStatus}`}>{linkLabels[team.linkStatus]}</strong>
+        </div>
+        <div className="snapshot-block">
+          <span>최근 활동</span>
+          <strong>{team.lastActivity}</strong>
+        </div>
+        <div className="snapshot-block">
+          <span>질문</span>
+          <p>{team.question ?? '현재 등록된 질문이 없습니다.'}</p>
+        </div>
+        <div className="snapshot-block">
+          <span>교수 피드백</span>
+          <p>{team.professorFeedback}</p>
+        </div>
+      </div>
+
+      <div className="snapshot-check-row">
+        {team.checklist.map((item) => (
+          <span className={item.done ? 'done' : 'pending'} key={item.label}>
+            {item.done ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}
+            {item.label}
+          </span>
+        ))}
+      </div>
+
+      <label className="private-note-field">
+        <span>
+          <ShieldCheck size={18} />
+          교수자 private note
+        </span>
+        <textarea value={note} onChange={(event) => onNoteChange(event.target.value)} rows={3} />
+      </label>
+    </section>
+  )
+}
+
+function PresentationQueuePanel({
+  selectedTeamId,
+  onSelectTeam,
+}: {
+  selectedTeamId: number
+  onSelectTeam: (teamId: number) => void
+}) {
+  return (
+    <section className="rail-card presentation-queue">
+      <h3>발표 Queue</h3>
+      <p>링크 문제 팀을 먼저 걸러 수업 흐름을 끊기지 않게 합니다.</p>
+      <div className="queue-list">
+        {presentationQueue.map((item) => {
+          const team = teams.find((candidate) => candidate.id === item.teamId)
+          if (!team) return null
+          const readiness = readinessMeta[item.status]
+          return (
+            <button
+              className={selectedTeamId === item.teamId ? 'queue-item selected' : 'queue-item'}
+              type="button"
+              key={item.teamId}
+              onClick={() => onSelectTeam(item.teamId)}
+            >
+              <span className={`queue-status ${readiness.className}`}>{item.label}</span>
+              <strong>{team.name}</strong>
+              <small>{item.detail}</small>
+              <ChevronRight size={17} />
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -383,9 +543,9 @@ function Metric({
   )
 }
 
-function QuickClassActions() {
+function QuickClassActions({ onNoticeOpen }: { onNoticeOpen: () => void }) {
   const actions = [
-    { label: '전체 공지', detail: '팀 전체에 안내 보내기', icon: Megaphone, tone: 'teal' },
+    { label: '전체 공지', detail: '팀 전체에 안내 보내기', icon: Megaphone, tone: 'teal', onClick: onNoticeOpen },
     { label: '질문 던지기', detail: '모든 팀에 질문하기', icon: MessageCircle, tone: 'amber' },
     { label: '시간 연장', detail: '활동 시간 추가하기', icon: Clock3, tone: 'blue' },
     { label: '자료 공유', detail: '수업 자료 제공하기', icon: Monitor, tone: 'purple' },
@@ -398,7 +558,7 @@ function QuickClassActions() {
         {actions.map((action) => {
           const Icon = action.icon
           return (
-            <button className={`quick-action ${action.tone}`} type="button" key={action.label}>
+            <button className={`quick-action ${action.tone}`} type="button" key={action.label} onClick={action.onClick}>
               <Icon size={31} />
               <span>
                 <strong>{action.label}</strong>
@@ -407,6 +567,49 @@ function QuickClassActions() {
             </button>
           )
         })}
+      </div>
+    </section>
+  )
+}
+
+function NoticeRecommendationPanel({
+  notices,
+  selectedNotice,
+  selectedNoticeId,
+  onSelectNotice,
+}: {
+  notices: ClassNotice[]
+  selectedNotice: ClassNotice
+  selectedNoticeId: number
+  onSelectNotice: (noticeId: number) => void
+}) {
+  return (
+    <section className="panel notice-recommendation-panel" aria-label="공지 추천">
+      <div className="notice-recommendation-head">
+        <div>
+          <span className="panel-kicker">Recommended Notice</span>
+          <h3>수업 전체 공지 추천</h3>
+          <p>교수자가 반복해서 말해야 하는 권한 확인과 유사 질문을 바로 공지로 바꿉니다.</p>
+        </div>
+        <span className={`notice-tone ${selectedNotice.tone}`}>{selectedNotice.target}</span>
+      </div>
+      <div className="notice-selector">
+        {notices.map((notice) => (
+          <button
+            className={selectedNoticeId === notice.id ? `notice-option active ${notice.tone}` : `notice-option ${notice.tone}`}
+            type="button"
+            key={notice.id}
+            onClick={() => onSelectNotice(notice.id)}
+          >
+            <strong>{notice.title}</strong>
+            <span>{notice.target}</span>
+          </button>
+        ))}
+      </div>
+      <div className="notice-preview">
+        <span>공지 미리보기</span>
+        <strong>{selectedNotice.title}</strong>
+        <p>{selectedNotice.body}</p>
       </div>
     </section>
   )

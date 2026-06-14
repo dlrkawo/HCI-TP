@@ -1,4 +1,4 @@
-import type { Alert, FeedbackSummary, Team, TimelineItem } from '../types'
+import type { Alert, ClassNotice, FeedbackSummary, PresentationQueueItem, Team, TimelineItem } from '../types'
 
 export const teams: Team[] = [
   {
@@ -12,6 +12,15 @@ export const teams: Team[] = [
     linkStatus: 'unchecked',
     lastActivity: '2분 전 업데이트',
     summary: '인터뷰 인사이트를 표로 정리하고 핵심 불편함을 묶는 중입니다.',
+    readiness: 'inProgress',
+    needsHelp: false,
+    professorFeedback: '핵심 불편함을 교수자의 수업 중 행동과 직접 연결해서 정리하면 좋겠습니다.',
+    checklist: [
+      { label: '활동 표 작성', done: true },
+      { label: '근거 자료 표시', done: true },
+      { label: '발표 준비 완료', done: false },
+    ],
+    noticeCount: 0,
   },
   {
     id: 2,
@@ -26,6 +35,15 @@ export const teams: Team[] = [
     summary: '토론 결과와 피그마 흐름도를 함께 제출했습니다.',
     question: '평가 기준에서 정량 지표와 정성 인사이트 중 무엇을 우선해야 하나요?',
     figmaUrl: 'https://www.figma.com/design/demo-team2',
+    readiness: 'waiting',
+    needsHelp: true,
+    professorFeedback: '질문이 전체 팀에도 도움이 될 수 있으니 공지로 풀어도 좋습니다.',
+    checklist: [
+      { label: '질문 작성', done: true },
+      { label: '피그마 링크 확인', done: true },
+      { label: '피드백 반영', done: false },
+    ],
+    noticeCount: 1,
   },
   {
     id: 3,
@@ -39,6 +57,15 @@ export const teams: Team[] = [
     lastActivity: '링크 문제 감지',
     summary: '피그마 링크가 제출되었지만 교수자 권한으로 접근할 수 없습니다.',
     figmaUrl: 'https://www.figma.com/design/abc123/team3',
+    readiness: 'blocked',
+    needsHelp: true,
+    professorFeedback: '발표 전 피그마 공유 권한을 교수자 계정 기준으로 다시 확인하세요.',
+    checklist: [
+      { label: '피그마 링크 제출', done: true },
+      { label: '교수자 접근 권한 확인', done: false },
+      { label: '발표 준비 완료', done: false },
+    ],
+    noticeCount: 2,
   },
   {
     id: 4,
@@ -51,6 +78,15 @@ export const teams: Team[] = [
     linkStatus: 'ok',
     lastActivity: '3분 전 제출',
     summary: '활동 표와 최종 결론을 제출했습니다. 발표 순서 대기 중입니다.',
+    readiness: 'ready',
+    needsHelp: false,
+    professorFeedback: '요약이 충분히 명확합니다. 발표 순서에 들어가도 됩니다.',
+    checklist: [
+      { label: '활동 표 제출', done: true },
+      { label: '최종 결론 정리', done: true },
+      { label: '발표 준비 완료', done: true },
+    ],
+    noticeCount: 0,
   },
   {
     id: 5,
@@ -63,6 +99,15 @@ export const teams: Team[] = [
     linkStatus: 'unchecked',
     lastActivity: '마지막 활동 8분 전',
     summary: '최근 활동 업데이트가 없어 교수 확인이 필요합니다.',
+    readiness: 'blocked',
+    needsHelp: true,
+    professorFeedback: '팀 논의가 멈춘 이유를 확인하고, 막힌 지점을 한 문장으로 남기게 안내하세요.',
+    checklist: [
+      { label: '팀 상태 업데이트', done: false },
+      { label: '막힌 지점 공유', done: false },
+      { label: '활동 재개', done: false },
+    ],
+    noticeCount: 1,
   },
   {
     id: 6,
@@ -77,6 +122,60 @@ export const teams: Team[] = [
     summary: '프로토타입 화면과 사용자 흐름을 피그마로 정리하고 있습니다.',
     question: '수업 중 실시간 질문을 어디에 배치하는 것이 좋을까요?',
     figmaUrl: 'https://www.figma.com/design/demo-team6',
+    readiness: 'inProgress',
+    needsHelp: false,
+    professorFeedback: '실시간 질문은 Action Needed와 Snapshot 양쪽에서 이어지게 보여주세요.',
+    checklist: [
+      { label: '피그마 화면 정리', done: true },
+      { label: '질문 위치 비교', done: true },
+      { label: '발표 준비 완료', done: false },
+    ],
+    noticeCount: 1,
+  },
+]
+
+export const presentationQueue: PresentationQueueItem[] = [
+  {
+    teamId: 3,
+    status: 'blocked',
+    label: '링크 문제',
+    detail: '피그마 권한 확인 후 발표 가능',
+  },
+  {
+    teamId: 4,
+    status: 'ready',
+    label: '발표 가능',
+    detail: '최종 산출물 제출 완료',
+  },
+  {
+    teamId: 6,
+    status: 'inProgress',
+    label: '진행 중',
+    detail: '피그마 흐름도 정리 중',
+  },
+]
+
+export const classNotices: ClassNotice[] = [
+  {
+    id: 1,
+    title: '발표 링크 권한 확인',
+    body: '발표 전 피그마/드라이브 링크가 교수자 계정에서 열리는지 한 번 더 확인해주세요.',
+    target: '링크 제출 팀',
+    tone: 'link',
+  },
+  {
+    id: 2,
+    title: '유사 질문 전체 공지',
+    body: '여러 팀에서 기능 우선순위 질문이 나왔습니다. 교수자는 평가 기준보다 수업 중 가시성 문제와 직접 연결되는 기능을 우선 봅니다.',
+    target: '전체 팀',
+    tone: 'question',
+  },
+  {
+    id: 3,
+    title: '활동 멈춤 팀 안내',
+    body: '막힌 팀은 완성된 결과보다 현재 막힌 지점과 필요한 도움을 먼저 스냅샷에 남겨주세요.',
+    target: '활동 없음 팀',
+    tone: 'inactive',
   },
 ]
 
