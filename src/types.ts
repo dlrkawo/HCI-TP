@@ -69,7 +69,7 @@ export type ClassNotice = {
 
 export type FormatPhase = 'preClass' | 'inClass'
 
-export type SubmissionType = 'figmaLink' | 'table'
+export type SubmissionType = 'figmaLink' | 'table' | 'both'
 
 export type TableRowRole = 'prompt' | 'response'
 

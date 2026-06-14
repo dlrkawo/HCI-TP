@@ -186,6 +186,7 @@ const formatPhaseLabels: Record<FormatPhase, string> = {
 const submissionLabels: Record<SubmissionType, string> = {
   figmaLink: '피그마 링크 제출',
   table: '표 형식 제출',
+  both: '둘 다 제출',
 }
 
 const rowRoleLabels: Record<TableRowRole, string> = {
@@ -249,6 +250,14 @@ function cloneClassFormat(format: ClassFormat): ClassFormat {
 
 function formatResponseKey(rowId: string, columnId: string) {
   return `${rowId}:${columnId}`
+}
+
+function formatUsesFigma(submissionType: SubmissionType) {
+  return submissionType === 'figmaLink' || submissionType === 'both'
+}
+
+function formatUsesTable(submissionType: SubmissionType) {
+  return submissionType === 'table' || submissionType === 'both'
 }
 
 function isValidFigmaFileUrl(url: string) {
@@ -419,7 +428,7 @@ function ProfessorDashboard({
                 onPublish={(format) => {
                   const publishedFormat = {
                     ...cloneClassFormat(format),
-                    publishedAt: '방금 학생 화면에 전달됨',
+                    publishedAt: '방금 저장되어 학생 화면에 반영됨',
                   }
                   onClassFormatChange(publishedFormat)
                   setDraftFormat(cloneClassFormat(publishedFormat))
@@ -825,7 +834,7 @@ function FormatBuilderPanel({
         <div>
           <span className="panel-kicker">Format Builder</span>
           <h3>학생 활동 포맷 만들기</h3>
-          <p>수업 단계와 제출 방식을 정하면 학생 화면에 바로 전달됩니다.</p>
+          <p>수업 단계와 제출 방식을 정하고 저장하면 학생 화면에 바로 반영됩니다.</p>
         </div>
         <span className={draftFormat.publishedAt ? 'published-badge active' : 'published-badge'}>
           {draftFormat.publishedAt ?? '전달 전'}
@@ -862,19 +871,21 @@ function FormatBuilderPanel({
       <div className="format-builder-section">
         <span className="builder-step">2. 제출 방식</span>
         <div className="format-choice-grid">
-          {(['figmaLink', 'table'] as SubmissionType[]).map((submissionType) => (
+          {(['figmaLink', 'table', 'both'] as SubmissionType[]).map((submissionType) => (
             <button
               className={draftFormat.submissionType === submissionType ? 'format-choice-card active' : 'format-choice-card'}
               type="button"
               key={submissionType}
               onClick={() => updateFormat({ submissionType })}
             >
-              {submissionType === 'figmaLink' ? <LinkIcon size={25} /> : <ClipboardList size={25} />}
+              {submissionType === 'figmaLink' ? <LinkIcon size={25} /> : submissionType === 'table' ? <ClipboardList size={25} /> : <CheckCircle2 size={25} />}
               <strong>{submissionLabels[submissionType]}</strong>
               <span>
                 {submissionType === 'figmaLink'
                   ? '학생은 자신이 만든 Figma 링크만 제출합니다.'
-                  : '교수가 만든 표 안에 학생이 직접 응답합니다.'}
+                  : submissionType === 'table'
+                    ? '교수가 만든 표 안에 학생이 직접 응답합니다.'
+                    : '피그마 링크 박스와 교수 제공 표를 함께 보여줍니다.'}
               </span>
             </button>
           ))}
@@ -886,12 +897,14 @@ function FormatBuilderPanel({
         <textarea value={draftFormat.instructions} onChange={(event) => updateFormat({ instructions: event.target.value })} rows={3} />
       </label>
 
-      {draftFormat.submissionType === 'figmaLink' ? (
+      {formatUsesFigma(draftFormat.submissionType) && (
         <label className="builder-wide-field">
           <span>피그마 제출 안내</span>
           <textarea value={draftFormat.figmaPrompt} onChange={(event) => updateFormat({ figmaPrompt: event.target.value })} rows={3} />
         </label>
-      ) : (
+      )}
+
+      {formatUsesTable(draftFormat.submissionType) && (
         <div className="format-table-editor">
           <div className="format-table-toolbar">
             <span>표 편집</span>
@@ -968,12 +981,16 @@ function FormatBuilderPanel({
           <strong>미리보기</strong>
           <span>
             {formatPhaseLabels[draftFormat.phase]} · {submissionLabels[draftFormat.submissionType]} · 학생 화면에
-            {draftFormat.submissionType === 'figmaLink' ? ' 링크 제출 카드가 표시됩니다.' : ' 교수 제공 표가 표시됩니다.'}
+            {draftFormat.submissionType === 'figmaLink'
+              ? ' 링크 제출 카드가 표시됩니다.'
+              : draftFormat.submissionType === 'table'
+                ? ' 교수 제공 표가 표시됩니다.'
+                : ' 링크 제출 카드와 교수 제공 표가 함께 표시됩니다.'}
           </span>
         </div>
         <button className="share-button" type="button" onClick={() => onPublish(draftFormat)}>
-          <Send size={18} />
-          학생에게 전달
+          <Save size={18} />
+          저장
         </button>
       </div>
     </section>
@@ -1156,13 +1173,16 @@ function StudentWorkspace({
   const [lastFinalizedAt, setLastFinalizedAt] = useState('마무리 전')
 
   const activeFormat = classFormat.publishedAt ? classFormat : undefined
-  const artifactType: ArtifactType = activeFormat ? (activeFormat.submissionType === 'figmaLink' ? 'figma' : 'table') : mode === 'both' ? 'mixed' : mode
-  const requiresFigma = activeFormat ? activeFormat.submissionType === 'figmaLink' : mode !== 'table'
-  const responseRows = activeFormat?.submissionType === 'table' ? activeFormat.tableTemplate.rows.filter((row) => row.role === 'response') : []
+  const activeFormatUsesFigma = activeFormat ? formatUsesFigma(activeFormat.submissionType) : false
+  const activeFormatUsesTable = activeFormat ? formatUsesTable(activeFormat.submissionType) : false
+  const artifactType: ArtifactType = activeFormat ? (activeFormat.submissionType === 'both' ? 'mixed' : activeFormat.submissionType === 'figmaLink' ? 'figma' : 'table') : mode === 'both' ? 'mixed' : mode
+  const requiresFigma = activeFormat ? activeFormatUsesFigma : mode !== 'table'
+  const activeTableColumns = activeFormat && activeFormatUsesTable ? activeFormat.tableTemplate.columns : []
+  const responseRows = activeFormat && activeFormatUsesTable ? activeFormat.tableTemplate.rows.filter((row) => row.role === 'response') : []
   const hasAssignedTableResponses =
-    activeFormat?.submissionType === 'table'
+    activeFormatUsesTable
       ? responseRows.some((row) =>
-          activeFormat.tableTemplate.columns.some((column) => (studentTableResponses[formatResponseKey(row.id, column.id)] ?? '').trim().length > 0),
+          activeTableColumns.some((column) => (studentTableResponses[formatResponseKey(row.id, column.id)] ?? '').trim().length > 0),
         )
       : false
   const hasFigmaUrl = figmaUrl.trim().length > 0
@@ -1170,26 +1190,34 @@ function StudentWorkspace({
   const figmaEmbedUrl = canRenderFigmaEmbed
     ? `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(figmaUrl.trim())}`
     : ''
-  const canShare = activeFormat?.submissionType === 'table' ? hasAssignedTableResponses : !requiresFigma || (hasFigmaUrl && linkStatus === 'ok')
+  const canShare = activeFormat
+    ? (!activeFormatUsesFigma || (hasFigmaUrl && linkStatus === 'ok')) && (!activeFormatUsesTable || hasAssignedTableResponses)
+    : !requiresFigma || (hasFigmaUrl && linkStatus === 'ok')
   const snapshotShared = saveState === 'shared'
   const canFinalize = snapshotShared && feedbackState === 'received'
   const selectedSignal = signalOptions.find((option) => option.value === teamSignal) ?? signalOptions[0]
   const professorSummary = useMemo(
     () => {
-      if (activeFormat?.submissionType === 'table') {
-        return responseRows
+      const tableSummary = activeFormatUsesTable
+        ? responseRows
           .map((row) => {
-            const values = activeFormat.tableTemplate.columns
+            const values = activeTableColumns
               .map((column) => studentTableResponses[formatResponseKey(row.id, column.id)]?.trim())
               .filter(Boolean)
             return values.length > 0 ? `${row.label}: ${values.join(' / ')}` : ''
           })
           .filter(Boolean)
           .join(' ')
+        : ''
+      if (activeFormat?.submissionType === 'table') {
+        return tableSummary
+      }
+      if (activeFormat?.submissionType === 'both') {
+        return [tableSummary, fields.question].filter(Boolean).join(' ')
       }
       return [fields.did, fields.decision, fields.blocked].filter(Boolean).join(' ')
     },
-    [activeFormat, fields.blocked, fields.decision, fields.did, responseRows, studentTableResponses],
+    [activeFormat, activeFormatUsesTable, activeTableColumns, fields.blocked, fields.decision, fields.did, fields.question, responseRows, studentTableResponses],
   )
   const currentClassBrief = activeFormat
     ? {
@@ -1216,17 +1244,21 @@ function StudentWorkspace({
   ]
   const checkpointItems = [
     {
-      label: activeFormat?.submissionType === 'table' ? '교수 제공 표 입력됨' : mode === 'figma' ? '피그마 링크 입력됨' : '활동 표 작성됨',
+      label: activeFormatUsesTable ? '교수 제공 표 입력됨' : mode === 'figma' ? '피그마 링크 입력됨' : '활동 표 작성됨',
       done:
-        activeFormat?.submissionType === 'table'
+        activeFormatUsesTable
           ? hasAssignedTableResponses
           : mode === 'figma'
             ? figmaUrl.trim().length > 0
             : fields.did.trim().length > 0,
     },
     {
-      label: activeFormat?.submissionType === 'table' ? '학생 입력 셀 작성됨' : '피그마 접근 권한 확인됨',
-      done: activeFormat?.submissionType === 'table' ? hasAssignedTableResponses : !requiresFigma || linkStatus === 'ok',
+      label: activeFormatUsesTable ? '학생 입력 셀 작성됨' : '피그마 접근 권한 확인됨',
+      done: activeFormatUsesTable ? hasAssignedTableResponses : !requiresFigma || linkStatus === 'ok',
+    },
+    {
+      label: requiresFigma ? '피그마 접근 권한 확인됨' : '피그마 없이 제출',
+      done: !requiresFigma || linkStatus === 'ok',
     },
     { label: '교수님께 질문 준비됨', done: fields.question.trim().length > 0 },
     { label: '발표 준비 완료', done: isFinalized },
@@ -1238,8 +1270,13 @@ function StudentWorkspace({
       done: saveState !== 'idle',
     },
     {
-      label: activeFormat?.submissionType === 'table' ? '표 입력 확인' : '링크 권한 확인',
-      detail: activeFormat?.submissionType === 'table' ? (hasAssignedTableResponses ? '학생 입력 완료' : '입력 전') : requiresFigma ? linkLabels[linkStatus] : '활동 표만 공유합니다.',
+      label: activeFormatUsesTable ? '표 입력 확인' : '링크 권한 확인',
+      detail: activeFormatUsesTable ? (hasAssignedTableResponses ? '학생 입력 완료' : '입력 전') : requiresFigma ? linkLabels[linkStatus] : '활동 표만 공유합니다.',
+      done: !activeFormatUsesTable || hasAssignedTableResponses,
+    },
+    {
+      label: requiresFigma ? '링크 권한 확인' : '링크 없음',
+      detail: requiresFigma ? linkLabels[linkStatus] : '표만 공유합니다.',
       done: canShare,
     },
     {
@@ -1277,10 +1314,16 @@ function StudentWorkspace({
       active: !activeFormat && mode !== 'both',
     },
     {
-      label: activeFormat?.submissionType === 'table' ? '표 입력' : '권한 확인',
-      detail: activeFormat?.submissionType === 'table' ? (hasAssignedTableResponses ? '입력 완료' : '학생 입력 필요') : linkLabels[linkStatus],
-      done: activeFormat?.submissionType === 'table' ? hasAssignedTableResponses : !requiresFigma || linkStatus === 'ok',
-      active: activeFormat?.submissionType === 'table' ? !hasAssignedTableResponses : requiresFigma && linkStatus === 'unchecked',
+      label: activeFormatUsesTable ? '표 입력' : '권한 확인',
+      detail: activeFormatUsesTable ? (hasAssignedTableResponses ? '입력 완료' : '학생 입력 필요') : linkLabels[linkStatus],
+      done: activeFormatUsesTable ? hasAssignedTableResponses : !requiresFigma || linkStatus === 'ok',
+      active: activeFormatUsesTable ? !hasAssignedTableResponses : requiresFigma && linkStatus === 'unchecked',
+    },
+    {
+      label: requiresFigma ? '권한 확인' : '링크 없음',
+      detail: requiresFigma ? linkLabels[linkStatus] : '표만 제출',
+      done: !requiresFigma || linkStatus === 'ok',
+      active: requiresFigma && linkStatus === 'unchecked',
     },
     {
       label: '저장',
@@ -1527,7 +1570,7 @@ function StudentWorkspace({
             </div>
           </section>
 
-          <div className={`workspace-grid ${activeFormat ? 'single-column' : mode === 'both' ? 'two-column' : 'single-column'}`}>
+          <div className={`workspace-grid ${activeFormat ? (activeFormat.submissionType === 'both' ? 'two-column' : 'single-column') : mode === 'both' ? 'two-column' : 'single-column'}`}>
             {!activeFormat && (mode === 'table' || mode === 'both') && (
               <section className="workspace-card">
                 <div className="card-title">
@@ -1556,7 +1599,7 @@ function StudentWorkspace({
               </section>
             )}
 
-            {activeFormat?.submissionType === 'table' && (
+            {activeFormat && activeFormatUsesTable && (
               <AssignedFormatTable
                 format={activeFormat}
                 responses={studentTableResponses}
@@ -1564,7 +1607,7 @@ function StudentWorkspace({
               />
             )}
 
-            {(activeFormat?.submissionType === 'figmaLink' || (!activeFormat && (mode === 'figma' || mode === 'both'))) && (
+            {((activeFormat && activeFormatUsesFigma) || (!activeFormat && (mode === 'figma' || mode === 'both'))) && (
               <section className="workspace-card figma-card">
                 <div className="card-title">
                   <span>2</span>
@@ -1644,9 +1687,11 @@ function StudentWorkspace({
               <ShieldCheck size={22} />
               {canShare
                 ? '교수자에게 공유할 준비가 되었습니다.'
-                : activeFormat?.submissionType === 'table'
-                  ? '교수 제공 표의 학생 입력 셀을 작성하세요.'
-                  : '공유하기 전에 링크 접근 권한을 확인하세요.'}
+                : activeFormat?.submissionType === 'both'
+                  ? '피그마 권한 확인과 표 입력을 모두 완료하세요.'
+                  : activeFormatUsesTable
+                    ? '교수 제공 표의 학생 입력 셀을 작성하세요.'
+                    : '공유하기 전에 링크 접근 권한을 확인하세요.'}
             </span>
             <div>
               <button className="outline-button" type="button" onClick={saveDraft}>
@@ -1718,7 +1763,7 @@ function StudentWorkspace({
           </p>
           <div className="snapshot-state-row">
             <span className={`snapshot-state ${saveState}`}>{saveLabels[saveState]}</span>
-            <span>{requiresFigma ? linkLabels[linkStatus] : activeFormat?.submissionType === 'table' ? '표 제출' : '링크 없음'}</span>
+            <span>{requiresFigma ? linkLabels[linkStatus] : activeFormatUsesTable ? '표 제출' : '링크 없음'}</span>
             <span>{lastSharedAt}</span>
             <span>{isFinalized ? '발표 준비 완료' : '마무리 전'}</span>
           </div>
@@ -1756,9 +1801,15 @@ function StudentWorkspace({
             </div>
             <hr />
             <div className="preview-row">
-              <span>{requiresFigma ? '피그마 링크' : '표 제출'}</span>
+              <span>{activeFormat?.submissionType === 'both' ? '피그마 + 표 제출' : requiresFigma ? '피그마 링크' : '표 제출'}</span>
               <strong className={requiresFigma ? `link-badge ${linkStatus}` : 'link-badge ok'}>
-                {requiresFigma ? linkLabels[linkStatus] : hasAssignedTableResponses ? '입력됨' : '입력 전'}
+                {activeFormat?.submissionType === 'both'
+                  ? `${linkLabels[linkStatus]} · ${hasAssignedTableResponses ? '표 입력됨' : '표 입력 전'}`
+                  : requiresFigma
+                    ? linkLabels[linkStatus]
+                    : hasAssignedTableResponses
+                      ? '입력됨'
+                      : '입력 전'}
               </strong>
             </div>
             {requiresFigma && hasFigmaUrl ? (
