@@ -107,4 +107,5 @@ export type ClassWeek = {
   weekNumber: number
   title: string
   format: ClassFormat
+  formats: Record<FormatPhase, ClassFormat>
 }

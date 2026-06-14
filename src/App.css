@@ -1138,6 +1138,29 @@ p {
   line-height: 1.35;
 }
 
+.activity-phase-tabs {
+  width: min(100%, 470px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.activity-phase-tabs button {
+  min-height: 42px;
+  border: 1px solid #d6dee9;
+  border-radius: 8px;
+  color: #1f2937;
+  font-weight: 900;
+  background: #ffffff;
+}
+
+.activity-phase-tabs button.active {
+  color: #ffffff;
+  border-color: #087995;
+  background: #087995;
+}
+
 .class-brief {
   width: min(100%, 1180px);
   display: grid;
@@ -1450,6 +1473,15 @@ p {
 
 .workspace-grid.single-column {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace-grid.stacked-submission {
+  gap: 16px;
+}
+
+.workspace-grid.stacked-submission .assigned-table-card,
+.workspace-grid.stacked-submission .figma-card {
+  width: 100%;
 }
 
 .workspace-card {
@@ -3330,6 +3362,10 @@ p {
   }
 
   .mode-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-phase-tabs {
     grid-template-columns: 1fr;
   }
 

@@ -452,15 +452,22 @@ function createDefaultTableTemplate(): TableTemplate {
   }
 }
 
-function createDefaultClassFormat(): ClassFormat {
+function createDefaultClassFormat(phase: FormatPhase = 'inClass'): ClassFormat {
   return {
-    phase: 'inClass',
+    phase,
     submissionType: 'figmaLink',
     title: '핵심 기능 우선순위 정하기',
     description: '팀별 논의 결과를 교수자가 빠르게 확인할 수 있도록 활동 산출물을 공유합니다.',
     instructions: '수업 중 결정한 내용, 근거, 막힌 지점을 먼저 정리한 뒤 팀 산출물을 제출하세요.',
     figmaPrompt: '팀이 만든 Figma 화면 흐름 링크를 붙여넣고, 공유 권한을 확인한 뒤 스냅샷을 공유하세요.',
     tableTemplate: createDefaultTableTemplate(),
+  }
+}
+
+function createDefaultClassFormats(): Record<FormatPhase, ClassFormat> {
+  return {
+    preClass: createDefaultClassFormat('preClass'),
+    inClass: createDefaultClassFormat('inClass'),
   }
 }
 
@@ -474,17 +481,21 @@ function cloneClassFormat(format: ClassFormat): ClassFormat {
   }
 }
 
-function createClassWeek(weekNumber: number, format = createDefaultClassFormat()): ClassWeek {
+function createClassWeek(weekNumber: number, formats = createDefaultClassFormats()): ClassWeek {
   return {
     id: `week-${weekNumber}`,
     weekNumber,
     title: `${weekNumber}주차`,
-    format: cloneClassFormat(format),
+    format: cloneClassFormat(formats.inClass),
+    formats: {
+      preClass: cloneClassFormat(formats.preClass),
+      inClass: cloneClassFormat(formats.inClass),
+    },
   }
 }
 
-function formatResponseKey(rowId: string, columnId: string) {
-  return `${rowId}:${columnId}`
+function formatResponseKey(phase: FormatPhase, rowId: string, columnId: string) {
+  return `${phase}:${rowId}:${columnId}`
 }
 
 function formatUsesFigma(submissionType: SubmissionType) {
@@ -533,12 +544,18 @@ function App() {
               ...week,
               title: `${week.weekNumber}주차`,
               format: nextFormat,
+              formats: {
+                ...week.formats,
+                [nextFormat.phase]: nextFormat,
+              },
             }
           : week,
       ),
     )
     setSelectedWeekId(weekId)
-    setStudentTableResponses({})
+    setStudentTableResponses((currentResponses) =>
+      Object.fromEntries(Object.entries(currentResponses).filter(([key]) => !key.startsWith(`${nextFormat.phase}:`))),
+    )
   }
 
   return (
@@ -1030,7 +1047,7 @@ function ClassCreationView({
   onAddWeek: (weekNumber: number) => void
   onSaveClassFormat: (weekId: string, format: ClassFormat) => void
 }) {
-  const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(selectedWeek.format))
+  const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(selectedWeek.formats.inClass))
   const [isWeekInputOpen, setIsWeekInputOpen] = useState(false)
   const [newWeekNumber, setNewWeekNumber] = useState('')
   const [weekInputError, setWeekInputError] = useState('')
@@ -1144,7 +1161,12 @@ function ClassCreationView({
             </div>
           </div>
 
-          <FormatBuilderPanel draftFormat={draftFormat} onDraftFormatChange={setDraftFormat} onPublish={saveFormat} />
+          <FormatBuilderPanel
+            draftFormat={draftFormat}
+            classFormats={selectedWeek.formats}
+            onDraftFormatChange={setDraftFormat}
+            onPublish={saveFormat}
+          />
           {saveNotice && (
             <div className="format-save-toast" role="status" aria-live="polite">
               <CheckCircle2 size={18} />
@@ -1159,10 +1181,12 @@ function ClassCreationView({
 
 function FormatBuilderPanel({
   draftFormat,
+  classFormats,
   onDraftFormatChange,
   onPublish,
 }: {
   draftFormat: ClassFormat
+  classFormats: Record<FormatPhase, ClassFormat>
   onDraftFormatChange: (format: ClassFormat) => void
   onPublish: (format: ClassFormat) => void
 }) {
@@ -1170,6 +1194,10 @@ function FormatBuilderPanel({
 
   const updateFormat = (updates: Partial<ClassFormat>) => {
     onDraftFormatChange({ ...draftFormat, ...updates })
+  }
+
+  const selectPhase = (phase: FormatPhase) => {
+    onDraftFormatChange(cloneClassFormat(classFormats[phase]))
   }
 
   const updateTableTemplate = (tableTemplate: TableTemplate) => {
@@ -1296,7 +1324,7 @@ function FormatBuilderPanel({
               className={draftFormat.phase === phase ? 'active' : ''}
               type="button"
               key={phase}
-              onClick={() => updateFormat({ phase })}
+              onClick={() => selectPhase(phase)}
             >
               {formatPhaseLabels[phase]}
             </button>
@@ -1591,6 +1619,7 @@ function StudentWorkspace({
   onStudentTableResponsesChange: (responses: Record<string, string>) => void
 }) {
   const [mode, setMode] = useState<WorkspaceMode>('both')
+  const [activityPhase, setActivityPhase] = useState<FormatPhase>('inClass')
   const [fields, setFields] = useState({
     did: '인터뷰 내용을 세 가지 핵심 불편함으로 묶었습니다.',
     decision: '새로운 학습관리시스템 기능보다 수업 중 팀 상태 가시성을 우선하기로 했습니다.',
@@ -1598,8 +1627,14 @@ function StudentWorkspace({
     blocked: '링크 문제와 활동 없음 중 어떤 알림을 먼저 보여줄지 확인이 필요합니다.',
     question: '링크 문제와 활동 없음 중 어떤 상황을 더 높은 우선순위로 봐야 할까요?',
   })
-  const [figmaUrl, setFigmaUrl] = useState('')
-  const [linkStatus, setLinkStatus] = useState<LinkStatus>('unchecked')
+  const [figmaUrls, setFigmaUrls] = useState<Record<FormatPhase, string>>({
+    preClass: '',
+    inClass: '',
+  })
+  const [linkStatuses, setLinkStatuses] = useState<Record<FormatPhase, LinkStatus>>({
+    preClass: 'unchecked',
+    inClass: 'unchecked',
+  })
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [lastSharedAt, setLastSharedAt] = useState('아직 공유 전')
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('none')
@@ -1616,6 +1651,22 @@ function StudentWorkspace({
       professor: '고동현',
       teamName: '3조',
       members: '김철수, 고길동, 고영희',
+      beforeSummary: '이번 주 사전 자료를 확인하며 팀 활동 기록 방식과 교수자 확인 흐름을 정리했습니다.',
+      beforeCheck: '각자 핵심 질문을 준비하고 수업 중 확인할 근거 자료를 미리 분담했습니다.',
+      inClassDate: '2026.06.15',
+      attendees: '김철수, 고길동, 고영희',
+      topic: '팀 활동 공간 프로토타입 개선',
+      activityContent: '교수 제공 표와 피그마 링크 제출 흐름을 확인하고 학생 화면에서 작성 부담이 적은 구조를 논의했습니다.',
+      discussion: 'Pre-class와 In-class 입력 항목을 분리하고, 제출 상태가 교수 화면에 어떻게 보일지 정리했습니다.',
+      nextPlan: '보고서 제출 흐름과 교수자 저장 알림을 시연 가능한 수준으로 다듬습니다.',
+      roleDivision: '김철수: 학생 보고서 화면, 고길동: 교수 수업 생성 흐름, 고영희: 발표 시나리오 정리',
+      schedule: '수업 전까지 화면 점검을 완료하고 발표 전 최종 링크를 확인합니다.',
+      professorFeedback: '교수자 피드백을 받은 뒤 우선순위와 제출 흐름을 보완할 예정입니다.',
+      presentation: '학생이 활동표, 피그마 링크, 보고서를 제출하는 전체 흐름을 발표합니다.',
+      artifactShare: '피그마 링크와 팀 보고서 화면을 함께 공유합니다.',
+      learned: '같은 수업 안에서도 사전 활동과 수업 중 활동은 입력 목적이 다르므로 탭으로 분리하는 것이 명확했습니다.',
+      felt: '학생 입장에서는 바로 제출 가능한 기본값과 명확한 제출 상태가 중요하다고 느꼈습니다.',
+      suggestion: '실제 구현 시에는 제출 후 수정 가능 시간과 교수자 확인 상태를 더 세분화하면 좋겠습니다.',
     }),
   )
   const [reportStatus, setReportStatus] = useState<ReportStatus>('draft')
@@ -1624,18 +1675,27 @@ function StudentWorkspace({
   const [submittedReports, setSubmittedReports] = useState<SubmittedReport[]>(submittedReportSamples)
   const [lastFinalizedAt, setLastFinalizedAt] = useState('마무리 전')
 
-  const classFormat = selectedWeek.format
+  const classFormat = selectedWeek.formats[activityPhase]
+  const figmaUrl = figmaUrls[activityPhase]
+  const linkStatus = linkStatuses[activityPhase]
   const activeFormat = classFormat.publishedAt ? classFormat : undefined
   const activeFormatUsesFigma = activeFormat ? formatUsesFigma(activeFormat.submissionType) : false
   const activeFormatUsesTable = activeFormat ? formatUsesTable(activeFormat.submissionType) : false
   const artifactType: ArtifactType = activeFormat ? (activeFormat.submissionType === 'both' ? 'mixed' : activeFormat.submissionType === 'figmaLink' ? 'figma' : 'table') : mode === 'both' ? 'mixed' : mode
+  const workspaceGridClass = activeFormat
+    ? activeFormat.submissionType === 'both'
+      ? 'workspace-grid single-column stacked-submission'
+      : 'workspace-grid single-column'
+    : mode === 'both'
+      ? 'workspace-grid two-column'
+      : 'workspace-grid single-column'
   const requiresFigma = activeFormat ? activeFormatUsesFigma : mode !== 'table'
   const activeTableColumns = activeFormat && activeFormatUsesTable ? activeFormat.tableTemplate.columns : []
   const responseRows = activeFormat && activeFormatUsesTable ? activeFormat.tableTemplate.rows.filter((row) => row.role === 'response') : []
   const hasAssignedTableResponses =
     activeFormatUsesTable
       ? responseRows.some((row) =>
-          activeTableColumns.some((column) => (studentTableResponses[formatResponseKey(row.id, column.id)] ?? '').trim().length > 0),
+          activeTableColumns.some((column) => (studentTableResponses[formatResponseKey(activityPhase, row.id, column.id)] ?? '').trim().length > 0),
         )
       : false
   const hasFigmaUrl = figmaUrl.trim().length > 0
@@ -1655,7 +1715,7 @@ function StudentWorkspace({
         ? responseRows
           .map((row) => {
             const values = activeTableColumns
-              .map((column) => studentTableResponses[formatResponseKey(row.id, column.id)]?.trim())
+              .map((column) => studentTableResponses[formatResponseKey(activityPhase, row.id, column.id)]?.trim())
               .filter(Boolean)
             return values.length > 0 ? `${row.label}: ${values.join(' / ')}` : ''
           })
@@ -1670,7 +1730,7 @@ function StudentWorkspace({
       }
       return [fields.did, fields.decision, fields.blocked].filter(Boolean).join(' ')
     },
-    [activeFormat, activeFormatUsesTable, activeTableColumns, fields.blocked, fields.decision, fields.did, fields.question, responseRows, studentTableResponses],
+    [activeFormat, activeFormatUsesTable, activeTableColumns, activityPhase, fields.blocked, fields.decision, fields.did, fields.question, responseRows, studentTableResponses],
   )
   const currentClassBrief = {
     title: classFormat.title,
@@ -1861,7 +1921,7 @@ function StudentWorkspace({
   const handleStudentTableCellChange = (rowId: string, columnId: string, value: string) => {
     onStudentTableResponsesChange({
       ...studentTableResponses,
-      [formatResponseKey(rowId, columnId)]: value,
+      [formatResponseKey(activityPhase, rowId, columnId)]: value,
     })
     if (snapshotShared) {
       setLastSharedAt('표 수정 후 다시 공유 필요')
@@ -1909,13 +1969,13 @@ function StudentWorkspace({
   const checkAccess = () => {
     const normalizedUrl = figmaUrl.trim().toLowerCase()
     if (!normalizedUrl) {
-      setLinkStatus('denied')
+      setLinkStatuses((current) => ({ ...current, [activityPhase]: 'denied' }))
       setSaveState('idle')
       setIsFinalized(false)
       setLastFinalizedAt('링크 입력 후 다시 확인 필요')
       return
     }
-    setLinkStatus(isValidFigmaFileUrl(normalizedUrl) ? 'ok' : 'denied')
+    setLinkStatuses((current) => ({ ...current, [activityPhase]: isValidFigmaFileUrl(normalizedUrl) ? 'ok' : 'denied' }))
     setSaveState('idle')
     setIsFinalized(false)
     setLastFinalizedAt('권한 확인 후 다시 공유 필요')
@@ -1939,7 +1999,7 @@ function StudentWorkspace({
 
   const shareSnapshot = () => {
     if (!canShare) {
-      setLinkStatus('denied')
+      setLinkStatuses((current) => ({ ...current, [activityPhase]: 'denied' }))
       setSaveState('idle')
       return
     }
@@ -2019,6 +2079,22 @@ function StudentWorkspace({
               <span>{selectedWeek.weekNumber}주차</span>
               <strong>{classFormat.title}</strong>
               <small>{classFormat.publishedAt ?? '교수자가 수업 생성 화면에서 저장하면 제출 포맷이 반영됩니다.'}</small>
+            </div>
+            <div className="activity-phase-tabs" role="tablist" aria-label="활동 단계">
+              {(['preClass', 'inClass'] as FormatPhase[]).map((phase) => (
+                <button
+                  className={activityPhase === phase ? 'active' : ''}
+                  type="button"
+                  key={phase}
+                  onClick={() => {
+                    setActivityPhase(phase)
+                    setSaveState('idle')
+                    setFeedbackState('none')
+                  }}
+                >
+                  {formatPhaseLabels[phase]}
+                </button>
+              ))}
             </div>
             {activeFormat ? (
               <div className="assigned-format-banner">
@@ -2109,7 +2185,7 @@ function StudentWorkspace({
             )}
           </section>
 
-          <div className={`workspace-grid ${activeFormat ? (activeFormat.submissionType === 'both' ? 'two-column' : 'single-column') : mode === 'both' ? 'two-column' : 'single-column'}`}>
+          <div className={workspaceGridClass}>
             {!activeFormat && (mode === 'table' || mode === 'both') && (
               <section className="workspace-card">
                 <div className="card-title">
@@ -2161,8 +2237,8 @@ function StudentWorkspace({
                     value={figmaUrl}
                     placeholder="https://www.figma.com/design/..."
                     onChange={(event) => {
-                      setFigmaUrl(event.target.value)
-                      setLinkStatus('unchecked')
+                      setFigmaUrls((current) => ({ ...current, [activityPhase]: event.target.value }))
+                      setLinkStatuses((current) => ({ ...current, [activityPhase]: 'unchecked' }))
                       if (snapshotShared) {
                         setLastSharedAt('링크 수정 후 다시 공유 필요')
                       }
@@ -2840,7 +2916,7 @@ function AssignedFormatTable({
                   <strong>{row.label}</strong>
                 </th>
                 {format.tableTemplate.columns.map((column) => {
-                  const responseKey = formatResponseKey(row.id, column.id)
+                  const responseKey = formatResponseKey(format.phase, row.id, column.id)
                   return (
                     <td key={column.id}>
                       {row.role === 'prompt' ? (
