@@ -52,7 +52,7 @@ type WorkspaceMode = 'table' | 'figma' | 'both'
 type SaveState = 'idle' | 'saved' | 'shared'
 type FeedbackState = 'none' | 'waiting' | 'received'
 type TeamSignal = 'normal' | 'question' | 'blocked' | 'ready'
-type ProfessorView = 'dashboard' | 'classCreation'
+type ProfessorView = 'dashboard' | 'classCreation' | 'reports'
 type StudentView = 'workspace' | 'report'
 type DemoFlowStep = {
   label: string
@@ -397,6 +397,33 @@ const submittedReportSamples: SubmittedReport[] = [
   },
 ]
 
+const teamReportFeedbackSamples = [
+  {
+    team: '1조',
+    feedback: '사전학습 요약은 명확했지만 수업 중 논의 근거가 조금 더 구체적이면 좋겠습니다.',
+  },
+  {
+    team: '2조',
+    feedback: '역할 분담과 추진 일정이 잘 정리되었습니다. 다음 보고서에는 결과물 링크를 함께 남겨주세요.',
+  },
+  {
+    team: '3조',
+    feedback: '문제 정의와 발표 흐름이 자연스럽습니다. 링크 권한 확인처럼 수업 중 발생한 이슈를 잘 반영했습니다.',
+  },
+  {
+    team: '4조',
+    feedback: '활동 내용은 충분하지만 배운 점과 느낀 점이 비슷하게 작성되어 구분이 필요합니다.',
+  },
+  {
+    team: '5조',
+    feedback: '논의 사항이 짧아 교수자가 진행 맥락을 파악하기 어렵습니다. 결정 이유를 1~2문장 더 추가하세요.',
+  },
+  {
+    team: '6조',
+    feedback: '피그마 결과물 공유와 발표 내용 연결이 좋습니다. 다음에는 팀원별 기여도도 함께 남기면 좋겠습니다.',
+  },
+]
+
 const readinessMeta: Record<TeamReadiness, { label: string; className: string }> = {
   ready: { label: '발표 가능', className: 'ready' },
   blocked: { label: '확인 필요', className: 'blocked' },
@@ -448,6 +475,75 @@ function createDefaultTableTemplate(): TableTemplate {
           blocker: '',
         },
       },
+    ],
+  }
+}
+
+function createDemoPainPointTableTemplate(): TableTemplate {
+  const questions = [
+    ['Efficiency (Speed & Steps)', 'Is it slow? (Responsiveness)'],
+    ['Efficiency (Speed & Steps)', 'Are there too many steps? (Minimal Action)'],
+    ['Accuracy (Safety & Errors)', 'Did it fail to stop a mistake? (Prevention)'],
+    ['Accuracy (Safety & Errors)', 'Was it hard to fix? (Recovery)'],
+    ['Accuracy (Safety & Errors)', 'Did it fail to alert you? (Detection)'],
+    ['Meaningfulness (Clarity)', 'Was the status hidden? (Honesty)'],
+    ['Meaningfulness (Clarity)', 'Was it confusing? (Understandability)'],
+    ['Meaningfulness (Clarity)', 'Is it too hard for a beginner? (Learnability)'],
+    ['Flexibility (User Control)', 'Did it force a specific way? (Substitutivity)'],
+    ['Flexibility (User Control)', 'Could you do two things at once? (Multi-threading)'],
+    ['Flexibility (User Control)', 'Could you customize it? (Personalization)'],
+    ['Consistency (Expectation)', 'Was the result unexpected? (Predictability)'],
+    ['Consistency (Expectation)', 'Were the terms strange? (Familiarity)'],
+    ['Consistency (Expectation)', 'Did it work differently from other apps? (Generalizability)'],
+  ]
+
+  return {
+    columns: [
+      { id: 'category', label: 'Category', width: 210 },
+      { id: 'question', label: 'Question', width: 360 },
+      { id: 'answer', label: 'Answer', width: 640 },
+    ],
+    rows: [
+      {
+        id: 'demo-title',
+        label: 'Title',
+        role: 'prompt',
+        cells: {
+          category: '',
+          question: 'Fill the Following Table',
+          answer: '',
+        },
+      },
+      {
+        id: 'demo-step-1-2',
+        label: 'Step 1 & 2',
+        role: 'prompt',
+        cells: {
+          category: 'Step 1 & 2',
+          question: 'Describe the Pain Point form Worst Experience',
+          answer: 'Answer',
+        },
+      },
+      {
+        id: 'demo-step-3',
+        label: 'Step 3',
+        role: 'prompt',
+        cells: {
+          category: 'Step 3',
+          question: 'Simply, answer the followings (Yes or No)',
+          answer: 'Answer',
+        },
+      },
+      ...questions.map(([category, question], index) => ({
+        id: `demo-answer-${index + 1}`,
+        label: category,
+        role: 'response' as TableRowRole,
+        cells: {
+          category,
+          question,
+          answer: '',
+        },
+      })),
     ],
   }
 }
@@ -506,6 +602,10 @@ function formatUsesTable(submissionType: SubmissionType) {
   return submissionType === 'table' || submissionType === 'both'
 }
 
+function formatUsesAnswerOnlyTable(format: ClassFormat) {
+  return format.tableTemplate.columns.some((column) => column.id === 'answer')
+}
+
 function isValidFigmaFileUrl(url: string) {
   const normalizedUrl = url.trim().toLowerCase()
   return normalizedUrl.includes('figma.com/design') || normalizedUrl.includes('figma.com/file')
@@ -515,6 +615,7 @@ function App() {
   const [classWeeks, setClassWeeks] = useState<ClassWeek[]>(() => [createClassWeek(7)])
   const [selectedWeekId, setSelectedWeekId] = useState('week-7')
   const [studentTableResponses, setStudentTableResponses] = useState<Record<string, string>>({})
+  const [submittedReports, setSubmittedReports] = useState<SubmittedReport[]>(submittedReportSamples)
 
   const selectedWeek = classWeeks.find((week) => week.id === selectedWeekId) ?? classWeeks[0] ?? createClassWeek(7)
 
@@ -533,6 +634,29 @@ function App() {
     const nextWeek = createClassWeek(weekNumber)
     setClassWeeks((currentWeeks) => [...currentWeeks, nextWeek])
     setSelectedWeekId(nextWeek.id)
+    setStudentTableResponses({})
+  }
+
+  const deleteClassWeek = (weekId: string) => {
+    if (classWeeks.length <= 1) return
+
+    const weekToDelete = classWeeks.find((week) => week.id === weekId)
+    const remainingWeeks = classWeeks.filter((week) => week.id !== weekId)
+    const nextSelectedWeek =
+      selectedWeekId === weekId
+        ? [...remainingWeeks]
+            .sort((a, b) => {
+              if (weekToDelete) {
+                const aDistance = a.weekNumber <= weekToDelete.weekNumber ? weekToDelete.weekNumber - a.weekNumber : 1000 + a.weekNumber
+                const bDistance = b.weekNumber <= weekToDelete.weekNumber ? weekToDelete.weekNumber - b.weekNumber : 1000 + b.weekNumber
+                return aDistance - bDistance
+              }
+              return a.weekNumber - b.weekNumber
+            })[0]
+        : selectedWeek
+
+    setClassWeeks(remainingWeeks)
+    setSelectedWeekId(nextSelectedWeek?.id ?? remainingWeeks[0].id)
     setStudentTableResponses({})
   }
 
@@ -558,6 +682,10 @@ function App() {
     )
   }
 
+  const submitStudentReport = (report: SubmittedReport) => {
+    setSubmittedReports((current) => [report, ...current])
+  }
+
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/professor" replace />} />
@@ -570,7 +698,9 @@ function App() {
             selectedWeekId={selectedWeekId}
             onSelectWeek={selectWeek}
             onAddWeek={addClassWeek}
+            onDeleteWeek={deleteClassWeek}
             onSaveClassFormat={saveClassFormatForWeek}
+            submittedReports={submittedReports}
           />
         }
       />
@@ -582,6 +712,8 @@ function App() {
             selectedWeek={selectedWeek}
             studentTableResponses={studentTableResponses}
             onStudentTableResponsesChange={setStudentTableResponses}
+            submittedReports={submittedReports}
+            onReportSubmit={submitStudentReport}
           />
         }
       />
@@ -596,14 +728,18 @@ function ProfessorDashboard({
   selectedWeekId,
   onSelectWeek,
   onAddWeek,
+  onDeleteWeek,
   onSaveClassFormat,
+  submittedReports,
 }: {
   classWeeks: ClassWeek[]
   selectedWeek: ClassWeek
   selectedWeekId: string
   onSelectWeek: (weekId: string) => void
   onAddWeek: (weekNumber: number) => void
+  onDeleteWeek: (weekId: string) => void
   onSaveClassFormat: (weekId: string, format: ClassFormat) => void
+  submittedReports: SubmittedReport[]
 }) {
   const [activeProfessorView, setActiveProfessorView] = useState<ProfessorView>('dashboard')
   const [filter, setFilter] = useState<TeamFilter>('all')
@@ -644,6 +780,7 @@ function ProfessorDashboard({
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0]
   const selectedNotice = classNotices.find((notice) => notice.id === selectedNoticeId) ?? classNotices[0]
   const isClassCreation = activeProfessorView === 'classCreation'
+  const isReports = activeProfessorView === 'reports'
 
   return (
     <div className="professor-app">
@@ -652,9 +789,9 @@ function ProfessorDashboard({
       <main className="professor-main">
         <header className="topbar">
           <div>
-            <h1>{isClassCreation ? '수업 생성' : '수업 중 컨트롤 타워'}</h1>
+            <h1>{isClassCreation ? '수업 생성' : isReports ? '보고서 확인' : '수업 중 컨트롤 타워'}</h1>
             <p>
-              HCI {selectedWeek.weekNumber}주차 · {isClassCreation ? '주차별 활동 포맷' : '팀 활동'}
+              HCI {selectedWeek.weekNumber}주차 · {isClassCreation ? '주차별 활동 포맷' : isReports ? '팀 보고서' : '팀 활동'}
             </p>
           </div>
           <div className="topbar-actions">
@@ -682,8 +819,11 @@ function ProfessorDashboard({
             selectedWeekId={selectedWeekId}
             onSelectWeek={onSelectWeek}
             onAddWeek={onAddWeek}
+            onDeleteWeek={onDeleteWeek}
             onSaveClassFormat={onSaveClassFormat}
           />
+        ) : isReports ? (
+          <ProfessorReportView reports={submittedReports} />
         ) : (
           <div className="professor-content">
             <section className="dashboard-area" aria-label="실시간 팀 상태">
@@ -770,7 +910,7 @@ function ProfessorSidebar({
     { label: '발표 관리', icon: Monitor },
     { label: '활동 요약', icon: BarChart3 },
     { label: '피드백', icon: MessageCircle },
-    { label: '보고서', icon: FileText },
+    { label: '보고서', icon: FileText, view: 'reports' as ProfessorView },
   ]
 
   return (
@@ -1038,6 +1178,7 @@ function ClassCreationView({
   selectedWeekId,
   onSelectWeek,
   onAddWeek,
+  onDeleteWeek,
   onSaveClassFormat,
 }: {
   weeks: ClassWeek[]
@@ -1045,6 +1186,7 @@ function ClassCreationView({
   selectedWeekId: string
   onSelectWeek: (weekId: string) => void
   onAddWeek: (weekNumber: number) => void
+  onDeleteWeek: (weekId: string) => void
   onSaveClassFormat: (weekId: string, format: ClassFormat) => void
 }) {
   const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(selectedWeek.formats.inClass))
@@ -1131,16 +1273,29 @@ function ClassCreationView({
           </div>
           <div className="week-list">
             {weeks.map((week) => (
-              <button
-                className={week.id === selectedWeekId ? 'week-button active' : 'week-button'}
-                type="button"
-                key={week.id}
-                onClick={() => onSelectWeek(week.id)}
-              >
-                <span>{week.weekNumber}주차</span>
-                <strong>{week.format.title}</strong>
-                <small>{week.format.publishedAt ?? '저장 전'}</small>
-              </button>
+              <div className={week.id === selectedWeekId ? 'week-list-item active' : 'week-list-item'} key={week.id}>
+                <button
+                  className="week-button"
+                  type="button"
+                  onClick={() => onSelectWeek(week.id)}
+                >
+                  <span>{week.weekNumber}주차</span>
+                  <strong>{week.format.title}</strong>
+                  <small>{week.format.publishedAt ?? '저장 전'}</small>
+                </button>
+                <button
+                  className="week-delete-button"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onDeleteWeek(week.id)
+                  }}
+                  disabled={weeks.length <= 1}
+                  aria-label={`${week.weekNumber}주차 삭제`}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             ))}
           </div>
         </aside>
@@ -1198,6 +1353,18 @@ function FormatBuilderPanel({
 
   const selectPhase = (phase: FormatPhase) => {
     onDraftFormatChange(cloneClassFormat(classFormats[phase]))
+  }
+
+  const selectSubmissionType = (submissionType: SubmissionType) => {
+    if (submissionType === 'figmaLink') {
+      updateFormat({ submissionType })
+      return
+    }
+
+    updateFormat({
+      submissionType,
+      tableTemplate: createDemoPainPointTableTemplate(),
+    })
   }
 
   const updateTableTemplate = (tableTemplate: TableTemplate) => {
@@ -1340,7 +1507,7 @@ function FormatBuilderPanel({
               className={draftFormat.submissionType === submissionType ? 'format-choice-card active' : 'format-choice-card'}
               type="button"
               key={submissionType}
-              onClick={() => updateFormat({ submissionType })}
+              onClick={() => selectSubmissionType(submissionType)}
             >
               {submissionType === 'figmaLink' ? <LinkIcon size={25} /> : submissionType === 'table' ? <ClipboardList size={25} /> : <CheckCircle2 size={25} />}
               <strong>{submissionLabels[submissionType]}</strong>
@@ -1609,14 +1776,143 @@ function FeedbackPanel() {
   )
 }
 
+function ProfessorReportView({ reports }: { reports: SubmittedReport[] }) {
+  const [selectedReportId, setSelectedReportId] = useState(reports[0]?.id ?? '')
+  const selectedReport = reports.find((report) => report.id === selectedReportId) ?? reports[0]
+  const basicFields: ReportFieldKey[] = ['week', 'course', 'department', 'professor', 'teamName', 'members']
+  const noopReportChange = () => undefined
+
+  return (
+    <section className="professor-report-view" aria-label="제출 보고서 확인">
+      <div className="section-head professor-report-head">
+        <div>
+          <h2>제출 보고서 확인</h2>
+          <p>학생이 제출한 주차별 팀 보고서를 같은 양식과 입력 내용으로 확인합니다.</p>
+        </div>
+        <span className="published-badge active">{reports.length}개 제출본</span>
+      </div>
+
+      <div className="report-board">
+        <aside className="report-history-panel" aria-label="교수자 보고서 목록">
+          <div>
+            <span>Report Inbox</span>
+            <h2>제출 목록</h2>
+            <p>새로 제출된 보고서가 목록 상단에 표시됩니다.</p>
+          </div>
+          <div className="report-history-list">
+            {reports.map((report) => (
+              <button
+                className={selectedReport.id === report.id ? 'report-history-item active' : 'report-history-item'}
+                type="button"
+                key={report.id}
+                onClick={() => setSelectedReportId(report.id)}
+              >
+                <strong>{report.week}</strong>
+                <span>{report.title}</span>
+                <small>{report.submittedAt}</small>
+                <em>제출 완료</em>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="report-form-panel">
+          <div className="report-hero professor-report-hero">
+            <span className="report-status submitted">제출 완료</span>
+            <h1>{selectedReport.title}</h1>
+            <p>{selectedReport.submittedAt} · 학생이 작성한 보고서 양식과 내용을 교수자 화면에서 그대로 확인합니다.</p>
+          </div>
+
+          <section className="report-card">
+            <div className="report-section-head">
+              <div>
+                <span>기본 정보</span>
+                <h2>보고서 정보</h2>
+              </div>
+              <small>{selectedReport.submittedAt}</small>
+            </div>
+            <div className="report-basic-grid">
+              {basicFields.map((key) => (
+                <ReportInput
+                  label={reportFieldLabels[key]}
+                  value={selectedReport.fields[key]}
+                  readOnly
+                  onChange={noopReportChange}
+                  key={key}
+                />
+              ))}
+            </div>
+          </section>
+
+          {reportSections.map((section) => (
+            <section className="report-card" key={section.eyebrow}>
+              <div className="report-section-head">
+                <div>
+                  <span>{section.eyebrow}</span>
+                  <h2>{section.title}</h2>
+                  <p>{section.description}</p>
+                </div>
+              </div>
+              <div className="report-field-grid">
+                {section.fields.map((field) =>
+                  field.multiline ? (
+                    <ReportTextarea
+                      label={field.label}
+                      value={selectedReport.fields[field.key]}
+                      note={field.note}
+                      readOnly
+                      onChange={noopReportChange}
+                      key={field.key}
+                    />
+                  ) : (
+                    <ReportInput
+                      label={field.label}
+                      value={selectedReport.fields[field.key]}
+                      readOnly
+                      onChange={noopReportChange}
+                      key={field.key}
+                    />
+                  ),
+                )}
+              </div>
+            </section>
+          ))}
+
+          <section className="report-card team-feedback-panel">
+            <div className="report-section-head">
+              <div>
+                <span>Class Feedback</span>
+                <h2>팀별 수업 피드백</h2>
+                <p>데모용으로 정리한 1조부터 6조까지의 수업 피드백입니다.</p>
+              </div>
+            </div>
+            <div className="team-feedback-grid">
+              {teamReportFeedbackSamples.map((item) => (
+                <article className="team-feedback-card" key={item.team}>
+                  <strong>{item.team}</strong>
+                  <p>{item.feedback}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function StudentWorkspace({
   selectedWeek,
   studentTableResponses,
   onStudentTableResponsesChange,
+  submittedReports,
+  onReportSubmit,
 }: {
   selectedWeek: ClassWeek
   studentTableResponses: Record<string, string>
   onStudentTableResponsesChange: (responses: Record<string, string>) => void
+  submittedReports: SubmittedReport[]
+  onReportSubmit: (report: SubmittedReport) => void
 }) {
   const [mode, setMode] = useState<WorkspaceMode>('both')
   const [activityPhase, setActivityPhase] = useState<FormatPhase>('inClass')
@@ -1672,7 +1968,6 @@ function StudentWorkspace({
   const [reportStatus, setReportStatus] = useState<ReportStatus>('draft')
   const [lastReportSubmittedAt, setLastReportSubmittedAt] = useState('미제출')
   const [selectedReportId, setSelectedReportId] = useState('current')
-  const [submittedReports, setSubmittedReports] = useState<SubmittedReport[]>(submittedReportSamples)
   const [lastFinalizedAt, setLastFinalizedAt] = useState('마무리 전')
 
   const classFormat = selectedWeek.formats[activityPhase]
@@ -1681,6 +1976,7 @@ function StudentWorkspace({
   const activeFormat = classFormat.publishedAt ? classFormat : undefined
   const activeFormatUsesFigma = activeFormat ? formatUsesFigma(activeFormat.submissionType) : false
   const activeFormatUsesTable = activeFormat ? formatUsesTable(activeFormat.submissionType) : false
+  const activeFormatAnswerOnlyTable = activeFormat ? formatUsesAnswerOnlyTable(activeFormat) : false
   const artifactType: ArtifactType = activeFormat ? (activeFormat.submissionType === 'both' ? 'mixed' : activeFormat.submissionType === 'figmaLink' ? 'figma' : 'table') : mode === 'both' ? 'mixed' : mode
   const workspaceGridClass = activeFormat
     ? activeFormat.submissionType === 'both'
@@ -1691,11 +1987,12 @@ function StudentWorkspace({
       : 'workspace-grid single-column'
   const requiresFigma = activeFormat ? activeFormatUsesFigma : mode !== 'table'
   const activeTableColumns = activeFormat && activeFormatUsesTable ? activeFormat.tableTemplate.columns : []
+  const responseColumns = activeFormatAnswerOnlyTable ? activeTableColumns.filter((column) => column.id === 'answer') : activeTableColumns
   const responseRows = activeFormat && activeFormatUsesTable ? activeFormat.tableTemplate.rows.filter((row) => row.role === 'response') : []
   const hasAssignedTableResponses =
     activeFormatUsesTable
       ? responseRows.some((row) =>
-          activeTableColumns.some((column) => (studentTableResponses[formatResponseKey(activityPhase, row.id, column.id)] ?? '').trim().length > 0),
+          responseColumns.some((column) => (studentTableResponses[formatResponseKey(activityPhase, row.id, column.id)] ?? '').trim().length > 0),
         )
       : false
   const hasFigmaUrl = figmaUrl.trim().length > 0
@@ -1714,6 +2011,10 @@ function StudentWorkspace({
       const tableSummary = activeFormatUsesTable
         ? responseRows
           .map((row) => {
+            if (activeFormatAnswerOnlyTable) {
+              const answer = studentTableResponses[formatResponseKey(activityPhase, row.id, 'answer')]?.trim()
+              return answer ? `${row.cells.question}: ${answer}` : ''
+            }
             const values = activeTableColumns
               .map((column) => studentTableResponses[formatResponseKey(activityPhase, row.id, column.id)]?.trim())
               .filter(Boolean)
@@ -1730,7 +2031,7 @@ function StudentWorkspace({
       }
       return [fields.did, fields.decision, fields.blocked].filter(Boolean).join(' ')
     },
-    [activeFormat, activeFormatUsesTable, activeTableColumns, activityPhase, fields.blocked, fields.decision, fields.did, fields.question, responseRows, studentTableResponses],
+    [activeFormat, activeFormatAnswerOnlyTable, activeFormatUsesTable, activeTableColumns, activityPhase, fields.blocked, fields.decision, fields.did, fields.question, responseRows, studentTableResponses],
   )
   const currentClassBrief = {
     title: classFormat.title,
@@ -1949,7 +2250,7 @@ function StudentWorkspace({
       submittedAt,
       fields: createReportFields(reportFields),
     }
-    setSubmittedReports((current) => [submittedReport, ...current])
+    onReportSubmit(submittedReport)
     setReportStatus('submitted')
     setLastReportSubmittedAt(submittedAt)
     setSelectedReportId(submittedReport.id)
@@ -2337,8 +2638,8 @@ function StudentWorkspace({
               </button>
             </div>
             <div className="activity-feed">
-              {activityFeed.map((item) => (
-                <span className={item.done ? 'feed-item done' : 'feed-item'} key={item.label}>
+              {activityFeed.map((item, index) => (
+                <span className={item.done ? 'feed-item done' : 'feed-item'} key={`${item.label}-${index}`}>
                   {item.done ? <CheckCircle2 size={17} /> : <Clock3 size={17} />}
                   <strong>{item.label}</strong>
                   <small>{item.detail}</small>
@@ -2460,8 +2761,8 @@ function StudentWorkspace({
             </span>
           </div>
           <div className="snapshot-checklist">
-            {checkpointItems.map((item) => (
-              <span className={item.done ? 'done' : 'pending'} key={item.label}>
+            {checkpointItems.map((item, index) => (
+              <span className={item.done ? 'done' : 'pending'} key={`${item.label}-${index}`}>
                 {item.done ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}
                 {item.label}
               </span>
@@ -2858,7 +3159,7 @@ function DemoFlowPanel({ steps }: { steps: DemoFlowStep[] }) {
       </div>
       <div className="demo-flow-list">
         {steps.map((step, index) => (
-          <span className={step.done ? 'demo-flow-step done' : step.active ? 'demo-flow-step active' : 'demo-flow-step'} key={step.label}>
+          <span className={step.done ? 'demo-flow-step done' : step.active ? 'demo-flow-step active' : 'demo-flow-step'} key={`${step.label}-${index}`}>
             <strong>{index + 1}</strong>
             <span>
               <b>{step.label}</b>
@@ -2881,6 +3182,7 @@ function AssignedFormatTable({
   onResponseChange: (rowId: string, columnId: string, value: string) => void
 }) {
   const tableWidth = format.tableTemplate.columns.reduce((sum, column) => sum + column.width, 160)
+  const answerOnlyTable = formatUsesAnswerOnlyTable(format)
 
   return (
     <section className="workspace-card assigned-table-card">
@@ -2917,9 +3219,10 @@ function AssignedFormatTable({
                 </th>
                 {format.tableTemplate.columns.map((column) => {
                   const responseKey = formatResponseKey(format.phase, row.id, column.id)
+                  const canEditCell = row.role === 'response' && (!answerOnlyTable || column.id === 'answer')
                   return (
                     <td key={column.id}>
-                      {row.role === 'prompt' ? (
+                      {!canEditCell ? (
                         <p>{row.cells[column.id]}</p>
                       ) : (
                         <textarea

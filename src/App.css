@@ -320,17 +320,34 @@ p {
   margin-top: 16px;
 }
 
+.week-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid #dfe6ef;
+  border-radius: 8px;
+  padding: 6px;
+  background: #ffffff;
+}
+
+.week-list-item.active,
+.week-list-item:hover {
+  border-color: #087995;
+  background: #eefafa;
+  box-shadow: 0 12px 26px rgba(8, 121, 149, 0.1);
+}
+
 .week-button {
   min-height: 96px;
   display: grid;
   align-content: center;
   gap: 6px;
-  border: 1px solid #dfe6ef;
-  border-radius: 8px;
-  padding: 13px;
+  border-radius: 7px;
+  padding: 7px;
   color: #243044;
   text-align: left;
-  background: #ffffff;
+  background: transparent;
 }
 
 .week-button span {
@@ -350,11 +367,22 @@ p {
   line-height: 1.35;
 }
 
-.week-button.active,
-.week-button:hover {
-  border-color: #087995;
-  background: #eefafa;
-  box-shadow: 0 12px 26px rgba(8, 121, 149, 0.1);
+.week-delete-button {
+  min-height: 38px;
+  align-self: start;
+  display: grid;
+  place-items: center;
+  border: 1px solid #f3c6cb;
+  border-radius: 7px;
+  color: #be123c;
+  background: #fff7f8;
+}
+
+.week-delete-button:disabled {
+  cursor: not-allowed;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  background: #f8fafc;
 }
 
 .week-editor-area {
@@ -2269,6 +2297,19 @@ p {
   margin: 0 auto;
 }
 
+.professor-report-view {
+  min-width: 0;
+  padding: 30px 26px 38px;
+}
+
+.professor-report-head {
+  margin-bottom: 18px;
+}
+
+.professor-report-view .report-board {
+  width: min(100%, 1180px);
+}
+
 .report-board {
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
@@ -2516,6 +2557,44 @@ p {
   background: #eef6ff;
 }
 
+.professor-report-hero {
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+}
+
+.team-feedback-panel {
+  background: #fbfdff;
+}
+
+.team-feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.team-feedback-card {
+  min-height: 98px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.team-feedback-card strong {
+  display: inline-flex;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #087995;
+  font-size: 12px;
+  background: #e6f6f6;
+}
+
+.team-feedback-card p {
+  margin-bottom: 0;
+  color: #374151;
+  line-height: 1.5;
+}
+
 .team-card {
   transition:
     border-color 160ms ease,
@@ -2736,10 +2815,18 @@ p {
 .format-table-scroll,
 .student-table-scroll {
   max-width: 100%;
-  overflow-x: auto;
+  overflow: auto;
   border: 1px solid #dce3ec;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.format-table-scroll {
+  max-height: 520px;
+}
+
+.student-table-scroll {
+  max-height: 640px;
 }
 
 .editable-format-table,
@@ -2774,10 +2861,13 @@ p {
 
 .editable-format-table thead th,
 .student-format-table thead th {
-  min-height: 48px;
-  padding: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 40px;
+  padding: 7px;
   color: #1f2937;
-  font-size: 13px;
+  font-size: 12px;
   background: #f8fafc;
 }
 
@@ -2791,14 +2881,15 @@ p {
 
 .column-head-cell input,
 .row-head-cell input {
-  min-height: 34px;
-  padding: 0 9px;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .column-head-cell button,
 .row-head-cell button {
-  min-height: 34px;
+  min-height: 30px;
   display: grid;
   place-items: center;
   border: 1px solid #e2e8f0;
@@ -2834,20 +2925,20 @@ p {
 
 .editable-format-table tbody th,
 .student-format-table tbody th {
-  padding: 10px;
+  padding: 7px;
   background: #fbfdff;
 }
 
 .row-head-cell {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 
 .row-role {
   width: fit-content;
   border-radius: 999px;
-  padding: 5px 8px;
-  font-size: 11px;
+  padding: 4px 7px;
+  font-size: 10px;
   font-weight: 900;
 }
 
@@ -2862,15 +2953,26 @@ p {
 }
 
 .editable-format-table td {
-  padding: 9px;
+  padding: 6px;
 }
 
 .editable-format-table textarea,
 .student-format-table textarea {
-  min-height: 84px;
   resize: vertical;
-  padding: 10px;
-  line-height: 1.45;
+  overflow: auto;
+  padding: 7px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.editable-format-table textarea {
+  min-height: 42px;
+  max-height: 84px;
+}
+
+.student-format-table textarea {
+  min-height: 70px;
+  max-height: 130px;
 }
 
 .editable-format-table tr.prompt td {
@@ -3235,6 +3337,10 @@ p {
     padding: 24px 18px;
   }
 
+  .professor-report-view {
+    padding: 24px 18px;
+  }
+
   .week-workspace {
     grid-template-columns: 1fr;
   }
@@ -3414,6 +3520,10 @@ p {
     padding: 24px 16px;
   }
 
+  .professor-report-view {
+    padding: 24px 16px;
+  }
+
   .class-creation-head {
     align-items: stretch;
   }
@@ -3474,7 +3584,8 @@ p {
   }
 
   .report-basic-grid,
-  .report-field-grid {
+  .report-field-grid,
+  .team-feedback-grid {
     grid-template-columns: 1fr;
   }
 
