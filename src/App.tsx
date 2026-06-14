@@ -36,6 +36,12 @@ type WorkspaceMode = 'table' | 'figma' | 'both'
 type SaveState = 'idle' | 'saved' | 'shared'
 type FeedbackState = 'none' | 'waiting' | 'received'
 type TeamSignal = 'normal' | 'question' | 'blocked' | 'ready'
+type DemoFlowStep = {
+  label: string
+  detail: string
+  done: boolean
+  active?: boolean
+}
 
 const statusMeta: Record<TeamStatus, { label: string; className: string }> = {
   active: { label: '활동 중', className: 'is-active' },
@@ -729,9 +735,9 @@ function StudentWorkspace() {
     blocked: '링크 문제와 활동 없음 중 어떤 알림을 먼저 보여줄지 확인이 필요합니다.',
     question: '링크 문제와 활동 없음 중 어떤 상황을 더 높은 우선순위로 봐야 할까요?',
   })
-  const [figmaUrl, setFigmaUrl] = useState('')
+  const [figmaUrl, setFigmaUrl] = useState('https://www.figma.com/design/abc123/team3')
   const [linkStatus, setLinkStatus] = useState<LinkStatus>('unchecked')
-  const [saveState, setSaveState] = useState<SaveState>('saved')
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [lastSharedAt, setLastSharedAt] = useState('아직 공유 전')
   const [feedbackState, setFeedbackState] = useState<FeedbackState>('none')
   const [teamSignal, setTeamSignal] = useState<TeamSignal>('normal')
@@ -806,6 +812,50 @@ function StudentWorkspace() {
       done: isFinalized,
     },
   ]
+  const demoFlowSteps = [
+    {
+      label: '상태 신호 선택',
+      detail: '질문 있음 또는 도움 필요',
+      done: teamSignal === 'question' || teamSignal === 'blocked' || teamSignal === 'ready',
+      active: teamSignal === 'normal',
+    },
+    {
+      label: '함께 제출',
+      detail: '활동 표와 피그마 링크',
+      done: mode === 'both',
+      active: mode !== 'both',
+    },
+    {
+      label: '권한 확인',
+      detail: linkLabels[linkStatus],
+      done: !requiresFigma || linkStatus === 'ok',
+      active: requiresFigma && linkStatus === 'unchecked',
+    },
+    {
+      label: '저장',
+      detail: saveState === 'idle' ? saveLabels[saveState] : '저장됨',
+      done: saveState === 'saved' || saveState === 'shared',
+      active: saveState === 'idle',
+    },
+    {
+      label: '스냅샷 공유',
+      detail: snapshotShared ? '공유됨' : '공유 전',
+      done: snapshotShared,
+      active: canShare && !snapshotShared,
+    },
+    {
+      label: '피드백 확인',
+      detail: feedbackState === 'received' ? '도착' : feedbackState === 'waiting' ? '확인 대기' : '공유 후 가능',
+      done: feedbackState === 'received',
+      active: feedbackState === 'waiting',
+    },
+    {
+      label: '발표 준비 완료',
+      detail: isFinalized ? '완료' : canFinalize ? '마무리 가능' : '피드백 필요',
+      done: isFinalized,
+      active: canFinalize && !isFinalized,
+    },
+  ]
   const completionCopy = isFinalized
     ? {
         title: '발표 준비가 완료되었습니다.',
@@ -846,7 +896,7 @@ function StudentWorkspace() {
   const checkAccess = () => {
     const normalizedUrl = figmaUrl.trim().toLowerCase()
     if (!normalizedUrl) {
-      setLinkStatus('unchecked')
+      setLinkStatus('denied')
       setSaveState('idle')
       setIsFinalized(false)
       setLastFinalizedAt('링크 입력 후 다시 확인 필요')
@@ -1127,7 +1177,12 @@ function StudentWorkspace() {
                 <h2>공유 진행 상황</h2>
                 <p>학생이 스냅샷을 보낸 뒤 교수자 확인 상태까지 이어지는 흐름입니다.</p>
               </div>
-              <button className="outline-button" type="button" onClick={receiveProfessorFeedback} disabled={!snapshotShared}>
+              <button
+                className={feedbackState === 'waiting' ? 'outline-button feedback-ready-button' : 'outline-button'}
+                type="button"
+                onClick={receiveProfessorFeedback}
+                disabled={!snapshotShared}
+              >
                 <MessageCircle size={17} />
                 피드백 확인
               </button>
@@ -1151,8 +1206,14 @@ function StudentWorkspace() {
               </span>
               <h2>{completionCopy.title}</h2>
               <p>{completionCopy.detail}</p>
+              {!canFinalize && !isFinalized && <small className="completion-hint">스냅샷 공유 후 교수자 피드백을 확인해야 완료할 수 있습니다.</small>}
             </div>
-            <button className="share-button" type="button" onClick={finalizePresentation} disabled={!canFinalize || isFinalized}>
+            <button
+              className={canFinalize && !isFinalized ? 'share-button finalize-ready-button' : 'share-button'}
+              type="button"
+              onClick={finalizePresentation}
+              disabled={!canFinalize || isFinalized}
+            >
               <CheckCircle2 size={18} />
               {isFinalized ? '완료됨' : '발표 준비 완료'}
             </button>
@@ -1160,6 +1221,7 @@ function StudentWorkspace() {
         </main>
 
         <aside className="professor-preview">
+          <DemoFlowPanel steps={demoFlowSteps} />
           <h2>교수자 화면 미리보기</h2>
           <p>
             <Eye size={17} />
@@ -1184,6 +1246,7 @@ function StudentWorkspace() {
               <span>팀 신호</span>
               <strong>{selectedSignal.label}</strong>
             </div>
+            <p className={`signal-preview-detail ${selectedSignal.className}`}>{selectedSignal.detail}</p>
             <hr />
             <div className="preview-row">
               <span>산출물</span>
@@ -1317,6 +1380,28 @@ function StudentSidebar() {
         교수자 대시보드
       </Link>
     </aside>
+  )
+}
+
+function DemoFlowPanel({ steps }: { steps: DemoFlowStep[] }) {
+  return (
+    <section className="demo-flow-panel" aria-label="학생 페이지 시연 순서">
+      <div className="demo-flow-head">
+        <span>Demo Flow</span>
+        <h2>학생 시연 순서</h2>
+      </div>
+      <div className="demo-flow-list">
+        {steps.map((step, index) => (
+          <span className={step.done ? 'demo-flow-step done' : step.active ? 'demo-flow-step active' : 'demo-flow-step'} key={step.label}>
+            <strong>{index + 1}</strong>
+            <span>
+              <b>{step.label}</b>
+              <small>{step.detail}</small>
+            </span>
+          </span>
+        ))}
+      </div>
+    </section>
   )
 }
 
