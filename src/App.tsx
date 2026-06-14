@@ -35,6 +35,7 @@ import type {
   ArtifactType,
   ClassFormat,
   ClassNotice,
+  ClassWeek,
   FormatPhase,
   LinkStatus,
   SubmissionType,
@@ -51,6 +52,7 @@ type WorkspaceMode = 'table' | 'figma' | 'both'
 type SaveState = 'idle' | 'saved' | 'shared'
 type FeedbackState = 'none' | 'waiting' | 'received'
 type TeamSignal = 'normal' | 'question' | 'blocked' | 'ready'
+type ProfessorView = 'dashboard' | 'classCreation'
 type DemoFlowStep = {
   label: string
   detail: string
@@ -248,6 +250,15 @@ function cloneClassFormat(format: ClassFormat): ClassFormat {
   }
 }
 
+function createClassWeek(weekNumber: number, format = createDefaultClassFormat()): ClassWeek {
+  return {
+    id: `week-${weekNumber}`,
+    weekNumber,
+    title: `${weekNumber}주차`,
+    format: cloneClassFormat(format),
+  }
+}
+
 function formatResponseKey(rowId: string, columnId: string) {
   return `${rowId}:${columnId}`
 }
@@ -266,23 +277,63 @@ function isValidFigmaFileUrl(url: string) {
 }
 
 function App() {
-  const [classFormat, setClassFormat] = useState<ClassFormat>(() => createDefaultClassFormat())
+  const [classWeeks, setClassWeeks] = useState<ClassWeek[]>(() => [createClassWeek(7)])
+  const [selectedWeekId, setSelectedWeekId] = useState('week-7')
   const [studentTableResponses, setStudentTableResponses] = useState<Record<string, string>>({})
 
-  const publishClassFormat = (nextFormat: ClassFormat) => {
-    setClassFormat(nextFormat)
+  const selectedWeek = classWeeks.find((week) => week.id === selectedWeekId) ?? classWeeks[0] ?? createClassWeek(7)
+
+  const selectWeek = (weekId: string) => {
+    setSelectedWeekId(weekId)
+    setStudentTableResponses({})
+  }
+
+  const addClassWeek = () => {
+    const nextWeekNumber = Math.max(...classWeeks.map((week) => week.weekNumber)) + 1
+    const nextWeek = createClassWeek(nextWeekNumber)
+    setClassWeeks((currentWeeks) => [...currentWeeks, nextWeek])
+    setSelectedWeekId(nextWeek.id)
+    setStudentTableResponses({})
+  }
+
+  const saveClassFormatForWeek = (weekId: string, nextFormat: ClassFormat) => {
+    setClassWeeks((currentWeeks) =>
+      currentWeeks.map((week) =>
+        week.id === weekId
+          ? {
+              ...week,
+              title: `${week.weekNumber}주차`,
+              format: nextFormat,
+            }
+          : week,
+      ),
+    )
+    setSelectedWeekId(weekId)
     setStudentTableResponses({})
   }
 
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/professor" replace />} />
-      <Route path="/professor" element={<ProfessorDashboard classFormat={classFormat} onClassFormatChange={publishClassFormat} />} />
+      <Route
+        path="/professor"
+        element={
+          <ProfessorDashboard
+            classWeeks={classWeeks}
+            selectedWeek={selectedWeek}
+            selectedWeekId={selectedWeekId}
+            onSelectWeek={selectWeek}
+            onAddWeek={addClassWeek}
+            onSaveClassFormat={saveClassFormatForWeek}
+          />
+        }
+      />
       <Route
         path="/student"
         element={
           <StudentWorkspace
-            classFormat={classFormat}
+            key={selectedWeek.id}
+            selectedWeek={selectedWeek}
             studentTableResponses={studentTableResponses}
             onStudentTableResponsesChange={setStudentTableResponses}
           />
@@ -294,12 +345,21 @@ function App() {
 }
 
 function ProfessorDashboard({
-  classFormat,
-  onClassFormatChange,
+  classWeeks,
+  selectedWeek,
+  selectedWeekId,
+  onSelectWeek,
+  onAddWeek,
+  onSaveClassFormat,
 }: {
-  classFormat: ClassFormat
-  onClassFormatChange: (format: ClassFormat) => void
+  classWeeks: ClassWeek[]
+  selectedWeek: ClassWeek
+  selectedWeekId: string
+  onSelectWeek: (weekId: string) => void
+  onAddWeek: () => void
+  onSaveClassFormat: (weekId: string, format: ClassFormat) => void
 }) {
+  const [activeProfessorView, setActiveProfessorView] = useState<ProfessorView>('dashboard')
   const [filter, setFilter] = useState<TeamFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('team')
   const [selectedTeamId, setSelectedTeamId] = useState(3)
@@ -307,8 +367,6 @@ function ProfessorDashboard({
     3: '발표 전 링크 권한을 먼저 확인시키기',
   })
   const [isNoticeOpen, setIsNoticeOpen] = useState(false)
-  const [isFormatBuilderOpen, setIsFormatBuilderOpen] = useState(false)
-  const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(classFormat))
   const [selectedNoticeId, setSelectedNoticeId] = useState(classNotices[0].id)
 
   const visibleTeams = useMemo(() => {
@@ -339,16 +397,19 @@ function ProfessorDashboard({
   }
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? teams[0]
   const selectedNotice = classNotices.find((notice) => notice.id === selectedNoticeId) ?? classNotices[0]
+  const isClassCreation = activeProfessorView === 'classCreation'
 
   return (
     <div className="professor-app">
-      <ProfessorSidebar />
+      <ProfessorSidebar activeView={activeProfessorView} onViewChange={setActiveProfessorView} />
 
       <main className="professor-main">
         <header className="topbar">
           <div>
-            <h1>수업 중 컨트롤 타워</h1>
-            <p>HCI 7주차 · 팀 활동</p>
+            <h1>{isClassCreation ? '수업 생성' : '수업 중 컨트롤 타워'}</h1>
+            <p>
+              HCI {selectedWeek.weekNumber}주차 · {isClassCreation ? '주차별 활동 포맷' : '팀 활동'}
+            </p>
           </div>
           <div className="topbar-actions">
             <button className="status-select" type="button">
@@ -367,8 +428,19 @@ function ProfessorDashboard({
           </div>
         </header>
 
-        <div className="professor-content">
-          <section className="dashboard-area" aria-label="실시간 팀 상태">
+        {isClassCreation ? (
+          <ClassCreationView
+            key={selectedWeek.id}
+            weeks={classWeeks}
+            selectedWeek={selectedWeek}
+            selectedWeekId={selectedWeekId}
+            onSelectWeek={onSelectWeek}
+            onAddWeek={onAddWeek}
+            onSaveClassFormat={onSaveClassFormat}
+          />
+        ) : (
+          <div className="professor-content">
+            <section className="dashboard-area" aria-label="실시간 팀 상태">
             <div className="section-head">
               <div>
                 <h2>실시간 팀 상태</h2>
@@ -414,27 +486,7 @@ function ProfessorDashboard({
               onNoteChange={(value) => setPrivateNotes((current) => ({ ...current, [selectedTeam.id]: value }))}
             />
 
-            <QuickClassActions
-              onNoticeOpen={() => setIsNoticeOpen((current) => !current)}
-              onFormatOpen={() => {
-                setDraftFormat(cloneClassFormat(classFormat))
-                setIsFormatBuilderOpen((current) => !current)
-              }}
-            />
-            {isFormatBuilderOpen && (
-              <FormatBuilderPanel
-                draftFormat={draftFormat}
-                onDraftFormatChange={setDraftFormat}
-                onPublish={(format) => {
-                  const publishedFormat = {
-                    ...cloneClassFormat(format),
-                    publishedAt: '방금 저장되어 학생 화면에 반영됨',
-                  }
-                  onClassFormatChange(publishedFormat)
-                  setDraftFormat(cloneClassFormat(publishedFormat))
-                }}
-              />
-            )}
+            <QuickClassActions onNoticeOpen={() => setIsNoticeOpen((current) => !current)} />
             {isNoticeOpen && (
               <NoticeRecommendationPanel
                 notices={classNotices}
@@ -444,23 +496,31 @@ function ProfessorDashboard({
               />
             )}
             <FeedbackPanel />
-          </section>
+            </section>
 
-          <aside className="insight-rail" aria-label="수업 인사이트">
+            <aside className="insight-rail" aria-label="수업 인사이트">
             <ActionNeededPanel />
             <PresentationQueuePanel selectedTeamId={selectedTeam.id} onSelectTeam={setSelectedTeamId} />
             <ClassPulse pulse={pulse} />
             <TimelinePanel />
-          </aside>
-        </div>
+            </aside>
+          </div>
+        )}
       </main>
     </div>
   )
 }
 
-function ProfessorSidebar() {
+function ProfessorSidebar({
+  activeView,
+  onViewChange,
+}: {
+  activeView: ProfessorView
+  onViewChange: (view: ProfessorView) => void
+}) {
   const items = [
-    { label: '실시간 상태', icon: LayoutDashboard, active: true },
+    { label: '실시간 상태', icon: LayoutDashboard, view: 'dashboard' as ProfessorView },
+    { label: '수업 생성', icon: ClipboardList, view: 'classCreation' as ProfessorView },
     { label: '발표 관리', icon: Monitor },
     { label: '활동 요약', icon: BarChart3 },
     { label: '피드백', icon: MessageCircle },
@@ -469,14 +529,20 @@ function ProfessorSidebar() {
 
   return (
     <aside className="professor-sidebar">
-      <Link to="/professor" className="tower-logo" aria-label="교수자 대시보드">
+      <Link to="/professor" className="tower-logo" aria-label="교수자 대시보드" onClick={() => onViewChange('dashboard')}>
         <Monitor size={30} />
       </Link>
       <nav className="side-nav">
         {items.map((item) => {
           const Icon = item.icon
+          const itemView = item.view ?? 'dashboard'
           return (
-            <button className={item.active ? 'side-nav-item active' : 'side-nav-item'} type="button" key={item.label}>
+            <button
+              className={item.view && activeView === itemView ? 'side-nav-item active' : 'side-nav-item'}
+              type="button"
+              key={item.label}
+              onClick={() => item.view && onViewChange(item.view)}
+            >
               <Icon size={21} />
               {item.label}
             </button>
@@ -691,10 +757,9 @@ function Metric({
   )
 }
 
-function QuickClassActions({ onNoticeOpen, onFormatOpen }: { onNoticeOpen: () => void; onFormatOpen: () => void }) {
+function QuickClassActions({ onNoticeOpen }: { onNoticeOpen: () => void }) {
   const actions = [
     { label: '전체 공지', detail: '팀 전체에 안내 보내기', icon: Megaphone, tone: 'teal', onClick: onNoticeOpen },
-    { label: '포맷 만들기', detail: '활동 제출 형식 전달', icon: ClipboardList, tone: 'green', onClick: onFormatOpen },
     { label: '질문 던지기', detail: '모든 팀에 질문하기', icon: MessageCircle, tone: 'amber' },
     { label: '시간 연장', detail: '활동 시간 추가하기', icon: Clock3, tone: 'blue' },
     { label: '자료 공유', detail: '수업 자료 제공하기', icon: Monitor, tone: 'purple' },
@@ -716,6 +781,91 @@ function QuickClassActions({ onNoticeOpen, onFormatOpen }: { onNoticeOpen: () =>
             </button>
           )
         })}
+      </div>
+    </section>
+  )
+}
+
+function ClassCreationView({
+  weeks,
+  selectedWeek,
+  selectedWeekId,
+  onSelectWeek,
+  onAddWeek,
+  onSaveClassFormat,
+}: {
+  weeks: ClassWeek[]
+  selectedWeek: ClassWeek
+  selectedWeekId: string
+  onSelectWeek: (weekId: string) => void
+  onAddWeek: () => void
+  onSaveClassFormat: (weekId: string, format: ClassFormat) => void
+}) {
+  const [draftFormat, setDraftFormat] = useState<ClassFormat>(() => cloneClassFormat(selectedWeek.format))
+
+  const saveFormat = (format: ClassFormat) => {
+    const publishedFormat = {
+      ...cloneClassFormat(format),
+      publishedAt: '방금 저장되어 학생 화면에 반영됨',
+    }
+    onSaveClassFormat(selectedWeek.id, publishedFormat)
+    setDraftFormat(cloneClassFormat(publishedFormat))
+  }
+
+  return (
+    <section className="class-creation-view" aria-label="주차별 수업 생성">
+      <div className="section-head class-creation-head">
+        <div>
+          <h2>주차별 수업 생성</h2>
+          <p>수업 단계와 제출 방식을 주차별로 저장하면 학생 화면도 같은 주차 내용으로 바뀝니다.</p>
+        </div>
+        <button className="share-button" type="button" onClick={onAddWeek}>
+          <Plus size={18} />
+          주차 추가
+        </button>
+      </div>
+
+      <div className="week-workspace">
+        <aside className="panel week-list-panel" aria-label="주차 메뉴">
+          <div className="week-list-head">
+            <span className="panel-kicker">Week Menu</span>
+            <h3>주차 메뉴</h3>
+            <p>교수자가 선택한 주차가 학생 화면에도 동일하게 표시됩니다.</p>
+          </div>
+          <div className="week-list">
+            {weeks.map((week) => (
+              <button
+                className={week.id === selectedWeekId ? 'week-button active' : 'week-button'}
+                type="button"
+                key={week.id}
+                onClick={() => onSelectWeek(week.id)}
+              >
+                <span>{week.weekNumber}주차</span>
+                <strong>{week.format.title}</strong>
+                <small>{week.format.publishedAt ?? '저장 전'}</small>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="week-editor-area">
+          <div className="panel selected-week-summary">
+            <div>
+              <span className="panel-kicker">Selected Week</span>
+              <h3>
+                {selectedWeek.weekNumber}주차 · {draftFormat.title}
+              </h3>
+              <p>{draftFormat.description}</p>
+            </div>
+            <div className="week-summary-badges">
+              <span>{formatPhaseLabels[draftFormat.phase]}</span>
+              <span>{submissionLabels[draftFormat.submissionType]}</span>
+              <span className={draftFormat.publishedAt ? 'saved' : ''}>{draftFormat.publishedAt ? '학생 화면 반영' : '저장 전'}</span>
+            </div>
+          </div>
+
+          <FormatBuilderPanel draftFormat={draftFormat} onDraftFormatChange={setDraftFormat} onPublish={saveFormat} />
+        </div>
       </div>
     </section>
   )
@@ -829,15 +979,15 @@ function FormatBuilderPanel({
   }
 
   return (
-    <section className="panel format-builder-panel" aria-label="포맷 만들기">
+    <section className="panel format-builder-panel" aria-label="수업 생성">
       <div className="format-builder-head">
         <div>
-          <span className="panel-kicker">Format Builder</span>
-          <h3>학생 활동 포맷 만들기</h3>
+          <span className="panel-kicker">Class Builder</span>
+          <h3>학생 활동 수업 생성</h3>
           <p>수업 단계와 제출 방식을 정하고 저장하면 학생 화면에 바로 반영됩니다.</p>
         </div>
         <span className={draftFormat.publishedAt ? 'published-badge active' : 'published-badge'}>
-          {draftFormat.publishedAt ?? '전달 전'}
+          {draftFormat.publishedAt ?? '저장 전'}
         </span>
       </div>
 
@@ -1146,11 +1296,11 @@ function FeedbackPanel() {
 }
 
 function StudentWorkspace({
-  classFormat,
+  selectedWeek,
   studentTableResponses,
   onStudentTableResponsesChange,
 }: {
-  classFormat: ClassFormat
+  selectedWeek: ClassWeek
   studentTableResponses: Record<string, string>
   onStudentTableResponsesChange: (responses: Record<string, string>) => void
 }) {
@@ -1172,6 +1322,7 @@ function StudentWorkspace({
   const [isFinalized, setIsFinalized] = useState(false)
   const [lastFinalizedAt, setLastFinalizedAt] = useState('마무리 전')
 
+  const classFormat = selectedWeek.format
   const activeFormat = classFormat.publishedAt ? classFormat : undefined
   const activeFormatUsesFigma = activeFormat ? formatUsesFigma(activeFormat.submissionType) : false
   const activeFormatUsesTable = activeFormat ? formatUsesTable(activeFormat.submissionType) : false
@@ -1219,18 +1370,17 @@ function StudentWorkspace({
     },
     [activeFormat, activeFormatUsesTable, activeTableColumns, fields.blocked, fields.decision, fields.did, fields.question, responseRows, studentTableResponses],
   )
-  const currentClassBrief = activeFormat
-    ? {
-        title: activeFormat.title,
-        description: activeFormat.description,
-        prompt: activeFormat.instructions,
-        meta: [
-          { label: '현재 단계', value: formatPhaseLabels[activeFormat.phase] },
-          { label: '제출 방식', value: submissionLabels[activeFormat.submissionType] },
-          { label: '공유 상태', value: activeFormat.publishedAt ?? '전달 전' },
-        ],
-      }
-    : studentClassBrief
+  const currentClassBrief = {
+    title: classFormat.title,
+    description: classFormat.description || studentClassBrief.description,
+    prompt: classFormat.instructions || studentClassBrief.prompt,
+    meta: [
+      { label: '현재 주차', value: `${selectedWeek.weekNumber}주차` },
+      { label: '현재 단계', value: formatPhaseLabels[classFormat.phase] },
+      { label: '제출 방식', value: submissionLabels[classFormat.submissionType] },
+      { label: '저장 상태', value: classFormat.publishedAt ? '학생 화면 반영됨' : '교수 저장 전' },
+    ],
+  }
   const currentStages = [
     { label: '사전학습 확인', status: '완료', done: true },
     { label: '팀별 논의', status: snapshotShared ? '정리 완료' : '진행 중', done: snapshotShared, active: !snapshotShared },
@@ -1461,7 +1611,7 @@ function StudentWorkspace({
       <header className="student-topbar">
         <div className="student-title">
           <Menu size={23} />
-          <strong>HCI 7주차 · 3팀 활동 공간</strong>
+          <strong>HCI {selectedWeek.weekNumber}주차 · 3팀 활동 공간</strong>
         </div>
         <div className="student-status">
           <span>
@@ -1487,6 +1637,11 @@ function StudentWorkspace({
           <section className="workspace-head">
             <h1>팀 활동 공간</h1>
             <p>교수자가 팀 상태를 먼저 파악할 수 있도록 10-20초 안에 읽히는 체크포인트를 공유합니다.</p>
+            <div className="student-week-strip" aria-label="현재 주차">
+              <span>{selectedWeek.weekNumber}주차</span>
+              <strong>{classFormat.title}</strong>
+              <small>{classFormat.publishedAt ?? '교수자가 수업 생성 화면에서 저장하면 제출 포맷이 반영됩니다.'}</small>
+            </div>
             {activeFormat ? (
               <div className="assigned-format-banner">
                 <span>

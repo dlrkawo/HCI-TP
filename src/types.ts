@@ -101,3 +101,10 @@ export type ClassFormat = {
   tableTemplate: TableTemplate
   publishedAt?: string
 }
+
+export type ClassWeek = {
+  id: string
+  weekNumber: number
+  title: string
+  format: ClassFormat
+}
